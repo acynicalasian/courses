@@ -1,0 +1,13 @@
+M:
+  a) phi
+  b) F
+  c) phi
+  d) T
+  e) F
+
+N:
+  a) r
+  b) n/a
+  c) r
+  d) 1
+  e) 0
