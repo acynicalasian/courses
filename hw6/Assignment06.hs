@@ -22,3 +22,23 @@ tree2 = NonLeaf VP (Leaf V "watches")
 -- IMPORTANT: Please do not change anything above here.
 --            Write all your code below this line.
 
+getNT :: Tree nt t -> nt
+getNT tr = case tr of
+  Leaf x y -> x
+  NonLeaf x y z -> x
+  
+treeToDeriv :: Tree nt t -> [RewriteRule nt t]
+treeToDeriv tr = case tr of
+  Leaf x y -> [TRule x y]
+  NonLeaf x y z -> [NTRule x (getNT y, getNT z)] ++ treeToDeriv y ++ treeToDeriv z
+
+f :: (Ord nt, Ord t, Semiring a) => GenericCFG nt t a -> [t] -> a
+f m w = let (nt, t, i, r) = m in
+  gen_or (map (\n -> i n &&& fastInside m w n) nt)
+
+outside :: (Ord nt, Ord t, Semiring v) => GenericCFG nt t v -> ([t],[t]) -> nt -> v
+outside cfg str n =
+  let (nt, t, i, r) = cfg in
+    case str of
+      ([], []) -> i n
+      (x : [], y : []) -> 
