@@ -65,3 +65,32 @@ tree_13 =
 -- IMPORTANT: Please do not change anything above here.
 --            Write all your code below this line.
 
+helper_count :: (Eq a) => a -> [Tree a] -> Int
+helper_count s t = case t of
+  [] -> 0
+  x : rest -> count s x + helper_count s rest
+
+count :: (Eq a) => a -> Tree a -> Int
+count s t = let Node x y = t in
+  (case (x == s) of { True -> 1; False -> 0 }) +
+  case y of
+    [] -> 0
+    z : rest -> helper_count s y
+
+leftEdge :: Tree a -> [a]
+leftEdge t = case t of
+  Node x y -> x : (case y of { [] -> []; z : rest -> leftEdge z })
+
+addChar :: [a] -> [a] -> [[a]]
+addChar str alpha = case alpha of
+  [] -> []
+  a : rest -> (str ++ [a]) : addChar str rest
+
+allLists :: Int -> [a] -> [[a]]
+allLists i s = case (i > 1) of
+  True -> map (\n -> addChar n s) (allLists (i - 1) s)
+  False -> case i of
+    1 -> addChar s s
+    0 -> []
+
+
