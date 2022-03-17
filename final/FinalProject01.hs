@@ -141,7 +141,7 @@ genBranches steps rules branches goal =
       [] -> []
       foo -> case cmp of        
         True -> branches
-        False -> genBranches steps rules (splitBranches steps rules branches goal) goal
+        False -> genBranches steps rules (removeDupe [] (splitBranches steps rules branches goal)) goal
 
 parser :: (Eq nt, Eq t)
        => [[RewriteRule nt t] -> Config nt t -> [ParseStep nt t]]
@@ -262,13 +262,10 @@ leftCorner cfg input =
   in
     parser [matchLC, shiftLC, predictLC, connectLC] rules start goal
 
-test :: (Eq nt, Eq t) => CFG nt t -> [t] -> [ParseStep nt t]
-test cfg input = let (_, _, _, rules) = cfg in
-  shift rules ([], input)
+removeDupe :: (Eq a) => [a] -> [a] -> [a]
+removeDupe hold src = case src of
+  [] -> hold
+  x : rest -> case (or (map (\hold -> x == hold) hold)) of
+    True -> removeDupe hold rest
+    False -> removeDupe (hold ++ [x]) rest
 
-test2 cfg input = let (_, _, start, rules) = cfg in
-  genBranches [shift, reduce] rules [[ParseStep NoTransition NoRule ([], input)]] ([NoBar start], [])
-
--- stepBranch works
-test3 cfg input = let (_, _, start, rules) = cfg in
-  genBranches [shift, reduce] rules [[ParseStep NoTransition NoRule ([], input)]] ([NoBar start], [])
