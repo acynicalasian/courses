@@ -166,19 +166,6 @@ match rule conf = case rule of
             True -> (ParseStep Match rw (drop 1 conf_l, drop 1 conf_r)) : match rest conf
             False -> match rest conf
 
--- Check left side of NTRule with left side of conf for a match; non-matching symbols
--- are stored in front as ntr_predict is recursively called based on the length of conf.
--- Return a proper stack configuration for the left side of a Config.
-ntr_predict :: (Eq nt) => RewriteRule nt t -> [Stack nt] -> [Stack nt] -> ([Stack nt], Bool)
-ntr_predict rule front conf = case rule of
-  TRule u v -> ([], False)
-  NTRule a r -> case conf of
-    [] -> ([], False)
-    l : rest -> case (NoBar a == l) of
-      True -> let s = map (\r -> NoBar r) r in
-        (front ++ s ++ drop 1 conf, True)
-      False -> ntr_predict rule (front ++ [l]) rest
-
 predict :: (Eq nt, Eq t) => [RewriteRule nt t] -> Config nt t -> [ParseStep nt t]
 predict rule conf = case rule of
   [] -> []
@@ -187,12 +174,12 @@ predict rule conf = case rule of
     NTRule a r -> let (conf_l, conf_r) = conf in
       case conf_l of
         [] -> []
-        foo -> let (newConf, check) = ntr_predict rw [] conf_l in
-          case check of
-            True -> case (length newConf > length conf_r) of
+        foo -> case (NoBar a == head conf_l) of
+          True -> let s = map (\r -> NoBar r) r in
+            case (length (s ++ conf_l) - 1 > length conf_r) of
               True -> predict rest conf
-              False -> (ParseStep Predict rw (newConf, conf_r)) : predict rest conf
-            False -> predict rest conf
+              False -> (ParseStep Predict rw (s ++ drop 1 conf_l, conf_r)) : predict rest conf
+          False -> predict rest conf
 
 topDown :: (Eq nt, Eq t) => CFG nt t -> [t] -> [[ParseStep nt t]]
 topDown cfg input =
@@ -229,18 +216,6 @@ shiftLC rule conf = case rule of
           True -> (ParseStep Shift rw ([NoBar a] ++ conf_l, drop 1 conf_r)) : shiftLC rest conf
           False -> shiftLC rest conf
 
--- Check if left side of Config contains the first non-terminal contained in the right side
--- of rule. Return proper stack configuration for left side of Config.
-ntr_predictLC :: (Eq nt) => RewriteRule nt t -> [Stack nt] -> [Stack nt] -> ([Stack nt], Bool)
-ntr_predictLC rule front conf = case rule of
-  TRule u v -> ([], False)
-  NTRule a r -> case conf of
-    [] -> ([], False)
-    l : rest -> case (NoBar (head r) == l) of
-      True -> let s = map (\r -> Bar r) (drop 1 r) in
-        (front ++ s ++ [NoBar a] ++ drop 1 conf, True)
-      False -> ntr_predictLC rule (front ++ [l]) rest
-
 countBar :: [Stack nt] -> Int
 countBar conf = case conf of
   [] -> 0
@@ -256,45 +231,25 @@ predictLC rule conf = case rule of
     NTRule a r -> let (conf_l, conf_r) = conf in
       case conf_l of
         [] -> []
-        foo -> let (newConf, check) = ntr_predictLC rw [] conf_l in
-          case check of
-            True -> case (countBar newConf > length conf_r) of
+        foo -> case (NoBar (head r) == head conf_l) of
+          True -> let s = map (\r -> Bar r) (drop 1 r) in
+            case (countBar s + countBar conf_l > length conf_r) of
               True -> predictLC rest conf
-              False -> (ParseStep Predict rw (newConf, conf_r)) : predictLC rest conf
-            False -> predictLC rest conf
-
--- Check left side of Config to see if NoBar (head r) and Bar a are there in that order;
--- if so, consume and put the rest of r in their place. If not found, push a non-terminal
--- into front and recursively check again.
-ntr_connectLC :: (Eq nt) => RewriteRule nt t -> [Stack nt] -> [Stack nt] -> ([Stack nt], Bool)
-ntr_connectLC rule front conf = case rule of
-  TRule u v -> ([], False)
-  NTRule a r -> case (length conf >= 2) of
-    False -> ([], False)
-
-
-
-
-    
-    True -> case (NoBar (head r) == head conf && Bar a == head (drop 1 conf)) of
-      True -> let s = map (\r -> Bar r) (drop 1 r) in
-        (front ++ s ++ drop 2 conf, True)
-      False -> ntr_connectLC rule (front ++ [head conf]) (drop 1 conf)
+              False -> (ParseStep Predict rw (s ++ [NoBar a] ++ drop 1 conf_l, conf_r)) : predictLC rest conf
+          False -> predictLC rest conf
 
 connectLC :: (Eq nt, Eq t) => [RewriteRule nt t] -> Config nt t -> [ParseStep nt t]
-connectLC rule conf = case rule of
-  [] -> []
-  rw : rest -> case rw of
-    TRule u v -> connectLC rest conf
-    NTRule a r -> let (conf_l, conf_r) = conf in
-      case conf_l of
-        [] -> []
-        foo -> let (newConf, check) = ntr_connectLC rw [] conf_l in
-          case check of
-            True -> case (countBar newConf > length conf_r) of
-              True -> connectLC rest conf
-              False -> (ParseStep Connect rw (newConf, conf_r)) : connectLC rest conf
-            False -> connectLC rest conf
+connectLC rule conf = let (conf_l, conf_r) = conf in
+  case (length conf_l >= 2) of
+    False -> []
+    True -> case rule of
+      [] -> []
+      rw : rest -> case rw of
+        TRule u v -> connectLC rest conf
+        NTRule a r -> case (NoBar (head r) == head conf_l && Bar a == head (drop 1 conf_l)) of
+          True -> let s = map (\r -> Bar r) (drop 1 r) in
+            (ParseStep Connect rw (s ++ drop 2 conf_l, conf_r)) : connectLC rest conf
+          False -> connectLC rest conf
 
 leftCorner :: (Eq nt, Eq t) => CFG nt t -> [t] -> [[ParseStep nt t]]
 leftCorner cfg input =
