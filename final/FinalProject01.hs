@@ -57,6 +57,27 @@ cfg4 = ([S,NP,VP,PP,N,V,P,D,ORC,SRC,THAT,POSS,WHILE],
         ]
        )
 
+cfg_test :: CFG Cat String
+cfg_test = ([S,NP,VP,PP,N,V,P,D,ORC,SRC,THAT,POSS,WHILE], 
+        ["baby","boy","actor","spouse","boss","award", "Mary","John","met","saw","won","the","on","in","with","that","'s","while", "watched", "cried"], 
+        S,
+        [(NTRule S [NP,VP]), (NTRule S [WHILE,S,S]),
+         (NTRule NP [NP,POSS,N]), (NTRule NP [D,N,PP,SRC,ORC]), (NTRule NP [N,PP,SRC,ORC]),
+         (NTRule NP [D,N,SRC,ORC]), (NTRule NP [D,N,PP,SRC]), (NTRule NP [D,N,PP,ORC]),
+         (NTRule NP [D,N,PP]), (NTRule NP [D,N,SRC]), (NTRule NP [D,N,ORC]),
+         (NTRule NP [N,PP,SRC]), (NTRule NP [N,PP,ORC]), (NTRule NP [N,SRC,ORC]),
+         (NTRule NP [D,N]), (NTRule NP [N,PP]), (NTRule NP [N,SRC]), (NTRule NP [N,ORC]),
+         (NTRule VP [V,NP,PP]), (NTRule VP [V,NP]), (NTRule VP [V,PP]), (NTRule VP [V]),
+         (NTRule PP [P,NP]), (NTRule SRC [THAT,VP]), (NTRule ORC [NP,V]),
+         (TRule N "baby"), (TRule N "boy"), (TRule N "actor"), (TRule N "spouse"), (TRule N "boss"), (TRule N "award"),
+         (TRule NP "Mary"), (TRule NP "John"),
+         (TRule V "met"), (TRule V "saw"), (TRule V "won"), 
+         (TRule D "the"), (TRule P "on"), (TRule P "in"), (TRule P "with"),
+         (TRule THAT "that"), (TRule POSS "'s"), (TRule WHILE "while"),
+         (TRule V "watched"), (TRule V "cried")
+        ]
+       )
+
 -- These functions are placeholders to work with 'bottomUp' in Part 1.3. 
 -- You should replace 'undefined' in these functions with your own code.
 
@@ -305,4 +326,3 @@ removeDupe hold src = case src of
   x : rest -> case (or (map (\hold -> x == hold) hold)) of
     True -> removeDupe hold rest
     False -> removeDupe (hold ++ [x]) rest
-
