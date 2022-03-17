@@ -60,6 +60,8 @@ cfg4 = ([S,NP,VP,PP,N,V,P,D,ORC,SRC,THAT,POSS,WHILE],
 -- These functions are placeholders to work with 'bottomUp' in Part 1.3. 
 -- You should replace 'undefined' in these functions with your own code.
 
+-- Goes through each element in ruleset rule and checks if a TRule is applicable
+-- at current configuration conf.
 shift :: (Eq nt, Eq t) => [RewriteRule nt t] -> Config nt t -> [ParseStep nt t]
 shift rule conf = case rule of
   [] -> []
@@ -82,6 +84,11 @@ ntr_reduce r front conf = case conf of
     True -> (front, True)
     False -> ntr_reduce r (front ++ [l]) rest
 
+-- Uses ntr_reduce to sift through elements that might be in front of the
+-- non-terminal symbols to be reduced; this is the only function that needs
+-- a helper since the rest of the transition steps only consider stack elements
+-- at the top of the stack. Checks each element in ruleset rule to see if a
+-- NTRule is applicable in current configuration conf.
 reduce :: (Eq nt, Eq t) => [RewriteRule nt t] -> Config nt t -> [ParseStep nt t]
 reduce rule conf = case rule of
   [] -> []
@@ -95,6 +102,8 @@ reduce rule conf = case rule of
             True -> (ParseStep Reduce rw (front ++ [NoBar a], conf_r)) : reduce rest conf
             False -> reduce rest conf
 
+-- Helper to parser; consider the parse paths created by applying a step to one
+-- particular branch.
 stepBranch :: (Eq nt, Eq t)
   => ([RewriteRule nt t] -> Config nt t -> [ParseStep nt t]) -- step to take
   -> [RewriteRule nt t] -- CFG rules
@@ -109,6 +118,7 @@ stepBranch step rules branch goal = let lastConf = getConfig (last branch) in
         False -> []
       pass -> map (\p -> branch ++ [p]) pass
 
+-- Combine the results of applying different steps via stepBranch.
 stepBranchAll :: (Eq nt, Eq t)
   => [[RewriteRule nt t] -> Config nt t -> [ParseStep nt t]] -- steps to take
   -> [RewriteRule nt t] -- CFG rules
@@ -119,6 +129,7 @@ stepBranchAll steps rules branch goal = case steps of
   [] -> []
   s : rest -> stepBranch s rules branch goal ++ stepBranchAll rest rules branch goal
 
+-- Apply all steps to all current paths.
 splitBranches :: (Eq nt, Eq t)
   => [[RewriteRule nt t] -> Config nt t -> [ParseStep nt t]] -- steps to take
   -> [RewriteRule nt t] -- CFG rules
@@ -129,6 +140,12 @@ splitBranches steps rules branches goal = case branches of
   [] -> []
   b : rest -> (stepBranchAll steps rules b goal) ++ (splitBranches steps rules rest goal)
 
+-- Helper for parser; does most of the parsing. For whatever reason, removeDupe is needed
+-- to prevent weird duplicate parses from leftCorner. Whatever, the parses themselves still
+-- seem good. Basically it takes the input variables from parser, except it generates new
+-- paths from the NoRule beginning of the parse. The generated paths are recursively
+-- passed back into genBranches until genBranches no longer generates new paths. stepBranch
+-- has logic to prevent paths from being generated when the goal config has been reached.
 genBranches :: (Eq nt, Eq t)
   => [[RewriteRule nt t] -> Config nt t -> [ParseStep nt t]] -- steps to take
   -> [RewriteRule nt t] -- CFG rules
@@ -143,6 +160,8 @@ genBranches steps rules branches goal =
         True -> branches
         False -> genBranches steps rules (removeDupe [] (splitBranches steps rules branches goal)) goal
 
+-- Pushes the data to genBranches, except the starting config is converted to the single path
+-- [[ParseStep ... start]].
 parser :: (Eq nt, Eq t)
        => [[RewriteRule nt t] -> Config nt t -> [ParseStep nt t]]
           -- ^ List of transition steps. ^
@@ -152,6 +171,8 @@ parser :: (Eq nt, Eq t)
        -> [[ParseStep nt t]]  -- List of possible parses.
 parser steps rules start goal = genBranches steps rules [[ParseStep NoTransition NoRule start]] goal
 
+-- Pops matching elements from the left side (conf_l) of the configuration conf if an element from
+-- ruleset rule can be applied.
 match :: (Eq nt, Eq t) => [RewriteRule nt t] -> Config nt t -> [ParseStep nt t]
 match rule conf = case rule of
   [] -> []
@@ -166,6 +187,8 @@ match rule conf = case rule of
             True -> (ParseStep Match rw (drop 1 conf_l, drop 1 conf_r)) : match rest conf
             False -> match rest conf
 
+-- If an element of ruleset rule can be applied, pops the top of the stack of conf_l and
+-- replaces it with the right side of the ruleset element being applied.
 predict :: (Eq nt, Eq t) => [RewriteRule nt t] -> Config nt t -> [ParseStep nt t]
 predict rule conf = case rule of
   [] -> []
@@ -181,6 +204,7 @@ predict rule conf = case rule of
               False -> (ParseStep Predict rw (s ++ drop 1 conf_l, conf_r)) : predict rest conf
           False -> predict rest conf
 
+-- Copies the formatting of bottomUp.
 topDown :: (Eq nt, Eq t) => CFG nt t -> [t] -> [[ParseStep nt t]]
 topDown cfg input =
   let
@@ -190,6 +214,7 @@ topDown cfg input =
   in
     parser [match, predict] rules start goal
 
+-- More or less copies match, except it considers Bar elements of the conf_l stack instead.
 matchLC :: (Eq nt, Eq t) => [RewriteRule nt t] -> Config nt t -> [ParseStep nt t]
 matchLC rule conf = case rule of
   [] -> []
@@ -204,6 +229,8 @@ matchLC rule conf = case rule of
             True -> (ParseStep Match rw (drop 1 conf_l, drop 1 conf_r)) : matchLC rest conf
             False -> matchLC rest conf
 
+-- More or less copies shift, except it pushes elements to the top of the conf_l stack instead
+-- of the bottom.
 shiftLC :: (Eq nt, Eq t) => [RewriteRule nt t] -> Config nt t -> [ParseStep nt t]
 shiftLC rule conf = case rule of
   [] -> []
@@ -216,6 +243,9 @@ shiftLC rule conf = case rule of
           True -> (ParseStep Shift rw ([NoBar a] ++ conf_l, drop 1 conf_r)) : shiftLC rest conf
           False -> shiftLC rest conf
 
+-- Helper function for predictLC to help prevent infinite loops in predictLC. The number of
+-- Bar elements shouldn't exceed the number of elements in conf_r since match can only get rid
+-- of the number of Bar elements to reach the goal config ([], []).
 countBar :: [Stack nt] -> Int
 countBar conf = case conf of
   [] -> 0
@@ -223,6 +253,8 @@ countBar conf = case conf of
     NoBar a -> countBar rest
     Bar b -> 1 + countBar rest
 
+-- Implements LC-prediction. I really don't know what else to write for this comment
+-- other than saying it implements the insertions/replacements for LC-predictions.
 predictLC :: (Eq nt, Eq t) => [RewriteRule nt t] -> Config nt t -> [ParseStep nt t]
 predictLC rule conf = case rule of
   [] -> []
@@ -238,6 +270,8 @@ predictLC rule conf = case rule of
               False -> (ParseStep Predict rw (s ++ [NoBar a] ++ drop 1 conf_l, conf_r)) : predictLC rest conf
           False -> predictLC rest conf
 
+-- Again, not sure what else to write here. rule, conf, conf_l, and conf_r are relatively top-level
+-- variables that have already been described. Implements LC-Connect.
 connectLC :: (Eq nt, Eq t) => [RewriteRule nt t] -> Config nt t -> [ParseStep nt t]
 connectLC rule conf = let (conf_l, conf_r) = conf in
   case (length conf_l >= 2) of
@@ -253,6 +287,7 @@ connectLC rule conf = let (conf_l, conf_r) = conf in
               False -> (ParseStep Connect rw (s ++ drop 2 conf_l, conf_r)) : connectLC rest conf
           False -> connectLC rest conf
 
+-- Implements LC-parsing.
 leftCorner :: (Eq nt, Eq t) => CFG nt t -> [t] -> [[ParseStep nt t]]
 leftCorner cfg input =
   let
@@ -262,6 +297,8 @@ leftCorner cfg input =
   in
     parser [matchLC, shiftLC, predictLC, connectLC] rules start goal
 
+-- Removes duplicates in a list. Used to get rid of weird duplicate parses when
+-- LC-parsing with leftCorner and parser.
 removeDupe :: (Eq a) => [a] -> [a] -> [a]
 removeDupe hold src = case src of
   [] -> hold
