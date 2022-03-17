@@ -248,7 +248,9 @@ connectLC rule conf = let (conf_l, conf_r) = conf in
         TRule u v -> connectLC rest conf
         NTRule a r -> case (NoBar (head r) == head conf_l && Bar a == head (drop 1 conf_l)) of
           True -> let s = map (\r -> Bar r) (drop 1 r) in
-            (ParseStep Connect rw (s ++ drop 2 conf_l, conf_r)) : connectLC rest conf
+            case (countBar (s ++ drop 2 conf_l) > length conf_r) of
+              True -> connectLC rest conf
+              False -> (ParseStep Connect rw (s ++ drop 2 conf_l, conf_r)) : connectLC rest conf
           False -> connectLC rest conf
 
 leftCorner :: (Eq nt, Eq t) => CFG nt t -> [t] -> [[ParseStep nt t]]
