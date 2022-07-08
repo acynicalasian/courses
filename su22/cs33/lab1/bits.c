@@ -1,7 +1,8 @@
 /* 
  * CS:APP Data Lab 
  * 
- * <Please put your name and userid here>
+ * Arthur Kim
+ * UID: 004919548
  * 
  * bits.c - Source file with your solutions to the Lab.
  *          This is the file you will hand in to your instructor.
@@ -167,7 +168,8 @@ NOTES:
  *   Rating: 1
  */
 int isTmax(int x) {
-  return 2;
+  // if x == INT_MAX, x + 1 = INT_MIN, INT_MAX +  INT_MIN = -1, so INT_MAX + INT_MAX + 1 + 1 = 0
+  return !(x + x + 2);
 }
 /* 
  * evenBits - return word with all even-numbered bits set to 1
@@ -176,7 +178,8 @@ int isTmax(int x) {
  *   Rating: 1
  */
 int evenBits(void) {
-  return 2;
+  // 0b01010101 = 85; add bitwise shifted numbers to create 32-bit 010101... 
+  return 85 + (85 << 8) + (85 << 16) + (85 << 24);
 }
 //2
 /* 
@@ -187,7 +190,8 @@ int evenBits(void) {
  *   Rating: 2
  */
 int isEqual(int x, int y) {
-  return 2;
+  // if x == y, then ~x + y equals -1 (0b111...111), so add one and use !
+  return !(~x + y + 1);
 }
 /* 
  * fitsBits - return 1 if x can be represented as an 
