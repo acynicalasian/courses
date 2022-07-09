@@ -168,9 +168,8 @@ NOTES:
  *   Rating: 1
  */
 int isTmax(int x) {
-  // if x == INT_MAX, x + 1 = INT_MIN, INT_MAX +  INT_MIN = -1, so
-  // INT_MAX + INT_MAX + 1 + 1 = 0
-  return !(x + x + 2);
+  int sum = x + x + 2;
+  return !sum;
 }
 /* 
  * evenBits - return word with all even-numbered bits set to 1
@@ -255,23 +254,35 @@ int conditional(int x, int y, int z) {
  *   Rating: 3
  */
 int isGreater(int x, int y) {
-  // if x > y, y - x is guaranteed to be negative
+  // check signs, equals -1 if conditions met
+  // use notation from conditional() to create flags equal to -1 if
+  // true, 0 else
+  // this setup avoids edge cases of overflow
+  int yx_neg = (x & y) >> 31;
+  int y_neg_x_pos = (~x & y) >> 31;
+  // y_pos_x_neg leads to y - x always at least 0, so this condition
+  // is always 0
+  int yx_pos = (~x & ~y) >> 31;
+  
+
+  // if x > y, y - x < 0
   // if x <= y, y - x >= 0
-  // (y - x)/4 to avoid edge cases of INT_MAX/INT_MIN being inputs
-  int x4 = x >> 3;
-  int y4 = y >> 3;
+
+  // if y_neg_x_pos, y - x < 0 so return 1
+  int ret1 = (y_neg_x_pos & 1);
+
+  // if yx_neg or yx_pos, overflow/underflows shouldn't occur
+  // if y - x < 0, signbit == -1, else signbit == 0
+  // !!0 = 0, !!(-1) = !0 = 1
   int neg_x = ~x + 1;
   int diff = y + neg_x;
-  int neg_x4 = ~x4 + 1;
-  int diff4 = y4 + neg_x4;
-
-  // -1 if diff < 0, 0 otherwise
   int signbit = diff >> 31;
-  int signbit4 = diff4 >> 31;
+  int isNeg = !!signbit;
+  int ret2 = (yx_neg | yx_pos) & isNeg;
 
-  return !!signbit | !!signbit4;
-
-  // if x < y, x - y is guaranteed to be negative
+  // Note that y_pos_x_neg guarantees y - x >= 0; if y - x >= 0, ret1
+  // and ret2 both evaluate to 0, so we return 0
+  return ret1 | ret2;
 }
 /*
  * multFiveEighths - multiplies by 5/8 rounding toward 0.
@@ -285,8 +296,12 @@ int isGreater(int x, int y) {
  *   Rating: 3
  */
 int multFiveEighths(int x) {
-  int sum = x + x + x + x + x;
-  return sum >> 3;
+  int isNeg = x >> 31;
+  int sum = x << 2 + x;
+
+  // if left side of | is executed, isNeg guaranteed to be -1 so no
+  // need to recalculate -1
+  return (isNeg & ((sum + (1 << 3) + isNeg) >> 3)) | (~isNeg & sum >> 3);
 }
 //4
 /* 
@@ -298,7 +313,12 @@ int multFiveEighths(int x) {
  *   Rating: 4 
  */
 int logicalNeg(int x) {
-  return 2;
+  // sign checks
+  int sign_pos_x = x >> 31;
+  int sign_neg_x = (~x + 1) >> 31;
+
+  // if (sign_pos_x NOR sign_neg_x) return 1
+  return (~(sign_pos_x | sign_neg_x) & 1);
 }
 /* 
  * twosComp2SignMag - Convert from two's complement to sign-magnitude 
@@ -310,7 +330,11 @@ int logicalNeg(int x) {
  *   Rating: 4
  */
 int twosComp2SignMag(int x) {
-  return 2;
+  // if x > TMin, no need to worry about TMin = ~TMin + 1
+  // return condition: if x < 0, get unsigned |x| and add sign bit
+  int isNeg = x >> 31;
+  int conv = ~x + 1 + (1 << 31);
+  return (isNeg & conv) | (~isNeg & x);
 }
 /*
  * isPower2 - returns 1 if x is a power of 2, and 0 otherwise
@@ -321,5 +345,80 @@ int twosComp2SignMag(int x) {
  *   Rating: 4
  */
 int isPower2(int x) {
-  return 2;
+  // Naive approach but I need the points I guess
+  // Make sure leftmost bit isn't 1
+  // if x >> 31 == -1, isPos == 0
+  // if x >> 31 == 0, isPos == 1
+  int isPos = !(~(x >> 31) + 1);
+
+  // int b1 = 0; // dummy
+  int chk1 = 0; // dummy  
+
+  // Use !!(bx & x) to check each individual bit
+  // I eventually ended up automating this text
+  int b2 = 1 << 30;
+  int chk2 = chk1 + !!(b2 & x);
+  int b3 = b2 >> 1;
+  int chk3 = chk2 + !!(b3 & x);
+  int b4 = b3 >> 1;
+  int chk4 = chk3 + !!(b4 & x);
+  int b5 = b4 >> 1;
+  int chk5 = chk4 + !!(b5 & x);
+  int b6 = b5 >> 1;
+  int chk6 = chk5 + !!(b6 & x);
+  int b7 = b6 >> 1;
+  int chk7 = chk6 + !!(b7 & x);
+  int b8 = b7 >> 1;
+  int chk8 = chk7 + !!(b8 & x);
+  int b9 = b8 >> 1;
+  int chk9 = chk8 + !!(b9 & x);
+  int b10 = b9 >> 1;
+  int chk10 = chk9 + !!(b10 & x);
+  int b11 = b10 >> 1;
+  int chk11 = chk10 + !!(b11 & x);
+  int b12 = b11 >> 1;
+  int chk12 = chk11 + !!(b12 & x);
+  int b13 = b12 >> 1;
+  int chk13 = chk12 + !!(b13 & x);
+  int b14 = b13 >> 1;
+  int chk14 = chk13 + !!(b14 & x);
+  int b15 = b14 >> 1;
+  int chk15 = chk14 + !!(b15 & x);
+  int b16 = b15 >> 1;
+  int chk16 = chk15 + !!(b16 & x);
+  int b17 = b16 >> 1;
+  int chk17 = chk16 + !!(b17 & x);
+  int b18 = b17 >> 1;
+  int chk18 = chk17 + !!(b18 & x);
+  int b19 = b18 >> 1;
+  int chk19 = chk18 + !!(b19 & x);
+  int b20 = b19 >> 1;
+  int chk20 = chk19 + !!(b20 & x);
+  int b21 = b20 >> 1;
+  int chk21 = chk20 + !!(b21 & x);
+  int b22 = b21 >> 1;
+  int chk22 = chk21 + !!(b22 & x);
+  int b23 = b22 >> 1;
+  int chk23 = chk22 + !!(b23 & x);
+  int b24 = b23 >> 1;
+  int chk24 = chk23 + !!(b24 & x);
+  int b25 = b24 >> 1;
+  int chk25 = chk24 + !!(b25 & x);
+  int b26 = b25 >> 1;
+  int chk26 = chk25 + !!(b26 & x);
+  int b27 = b26 >> 1;
+  int chk27 = chk26 + !!(b27 & x);
+  int b28 = b27 >> 1;
+  int chk28 = chk27 + !!(b28 & x);
+  int b29 = b28 >> 1;
+  int chk29 = chk28 + !!(b29 & x);
+  int b30 = b29 >> 1;
+  int chk30 = chk29 + !!(b30 & x);
+  int b31 = b30 >> 1;
+  int chk31 = chk30 + !!(b31 & x);
+  int b32 = b31 >> 1;
+  int chk32 = chk31 + !!(b32 & x);
+
+  // should return 1 if chk32 == 1 like it should
+  return (isPos & !(chk32 + ~0));
 }
