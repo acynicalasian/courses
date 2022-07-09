@@ -168,7 +168,8 @@ NOTES:
  *   Rating: 1
  */
 int isTmax(int x) {
-  // if x == INT_MAX, x + 1 = INT_MIN, INT_MAX +  INT_MIN = -1, so INT_MAX + INT_MAX + 1 + 1 = 0
+  // if x == INT_MAX, x + 1 = INT_MIN, INT_MAX +  INT_MIN = -1, so
+  // INT_MAX + INT_MAX + 1 + 1 = 0
   return !(x + x + 2);
 }
 /* 
@@ -178,7 +179,8 @@ int isTmax(int x) {
  *   Rating: 1
  */
 int evenBits(void) {
-  // 0b01010101 = 85; add bitwise shifted numbers to create 32-bit 010101... 
+  // 0b01010101 = 85; add bitwise shifted numbers to create 32-bit
+  // 010101...
   return 85 + (85 << 8) + (85 << 16) + (85 << 24);
 }
 //2
@@ -190,7 +192,8 @@ int evenBits(void) {
  *   Rating: 2
  */
 int isEqual(int x, int y) {
-  // if x == y, then ~x + y equals -1 (0b111...111), so add one and use !
+  // if x == y, then ~x + y equals -1 (0b111...111), so add one and
+  // use !
   return !(~x + y + 1);
 }
 /* 
@@ -203,7 +206,27 @@ int isEqual(int x, int y) {
  *   Rating: 2
  */
 int fitsBits(int x, int n) {
-  return 2;
+  // When checking if a positive x fits, ~x must fit as well
+  // For x >= 0, take ~|x|; for x < 0, take ~(|x| - 1) to get x back
+  // Check if ~x for x >= 0 or x for x < 0 fits in n bits
+  
+  // Algorithm to find absolute value of x
+  // y = 0 for x >= 0, y = -1 for x < 0
+  int y = x >> 31;
+  // add 0 to x if x >= 0 or -1 if x < 0
+  // if x < 0, (x - 1) XOR -1 = |x|
+  // if x >= 0, x XOR 0 = |x|
+  int z = x + y;
+  int abs_x = z ^ y;
+  int neg = ~(abs_x + y);
+
+  // Save operators by creating a constant
+  int m1 = ~0;
+  // Minimum in n bytes must equal -1 << (n - 1)
+  int min = m1 << (n + m1);
+  // If neg does fit within min, min & neg should equal min
+  int cmp = min & neg;
+  return !(~cmp + min + 1);
 }
 //3
 /* 
@@ -214,7 +237,15 @@ int fitsBits(int x, int n) {
  *   Rating: 3
  */
 int conditional(int x, int y, int z) {
-  return 2;
+  // !0 = 1, so !(!0) - 1 = -1
+  int m1 = ~0;
+  int n = !x + m1;
+  // note that any number n & -1 = n
+  // if n == -1, return statement evals to (-1 & y) | (0 & z) which
+  // simplifies to y | 0 and then y
+  // if n == 0, return statement evals to (0 & y) | (-1 & z) which
+  // simplifies to 0 | z and then z
+  return (n & y) | (~n & z);
 }
 /* 
  * isGreater - if x > y  then return 1, else return 0 
@@ -224,7 +255,23 @@ int conditional(int x, int y, int z) {
  *   Rating: 3
  */
 int isGreater(int x, int y) {
-  return 2;
+  // if x > y, y - x is guaranteed to be negative
+  // if x <= y, y - x >= 0
+  // (y - x)/4 to avoid edge cases of INT_MAX/INT_MIN being inputs
+  int x4 = x >> 3;
+  int y4 = y >> 3;
+  int neg_x = ~x + 1;
+  int diff = y + neg_x;
+  int neg_x4 = ~x4 + 1;
+  int diff4 = y4 + neg_x4;
+
+  // -1 if diff < 0, 0 otherwise
+  int signbit = diff >> 31;
+  int signbit4 = diff4 >> 31;
+
+  return !!signbit | !!signbit4;
+
+  // if x < y, x - y is guaranteed to be negative
 }
 /*
  * multFiveEighths - multiplies by 5/8 rounding toward 0.
@@ -238,7 +285,8 @@ int isGreater(int x, int y) {
  *   Rating: 3
  */
 int multFiveEighths(int x) {
-  return 2;
+  int sum = x + x + x + x + x;
+  return sum >> 3;
 }
 //4
 /* 
