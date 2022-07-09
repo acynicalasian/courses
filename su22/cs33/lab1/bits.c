@@ -297,7 +297,7 @@ int isGreater(int x, int y) {
  */
 int multFiveEighths(int x) {
   int isNeg = x >> 31;
-  int sum = x << 2 + x;
+  int sum = (x << 2) + x;
 
   // if left side of | is executed, isNeg guaranteed to be -1 so no
   // need to recalculate -1
