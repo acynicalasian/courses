@@ -1,7 +1,8 @@
 /* 
  * CS:APP Data Lab 
  * 
- * <Please put your name and userid here>
+ * Arthur Kim
+ * UID: 004919548
  * 
  * bits.c - Source file with your solutions to the Lab.
  *          This is the file you will hand in to your instructor.
@@ -143,5 +144,8 @@ NOTES:
  *   Rating: 3
  */
 int ezThreeFourths(int x) {
-  return 2;
+  int triple, bias;
+  triple = x + x + x;
+  bias = (triple >> 31) & 3;
+  return (triple + bias) >> 2;
 }
