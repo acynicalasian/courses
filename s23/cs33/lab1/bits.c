@@ -2,6 +2,9 @@
  * CS:APP Data Lab 
  * 
  * <Please put your name and userid here>
+ * Arthur Kim
+ * UID: 004919548
+ * classart@cs33.seas.ucla.edu
  * 
  * bits.c - Source file with your solutions to the Lab.
  *          This is the file you will hand in to your instructor.
@@ -167,7 +170,10 @@ NOTES:
  *   Rating: 1
  */
 int isTmax(int x) {
-  return 2;
+  /* x + (x + 1) = -1 if x = TMAX or -1
+   * Note that ~(-1) = 0
+   * Make sure x isn't -1 */
+  return !!(x + 1) & !~(x + x + 1);
 }
 //2
 /* 
@@ -177,7 +183,8 @@ int isTmax(int x) {
  *   Rating: 1
  */
 int evenBits(void) {
-  return 2;
+  /* 0b01010101 = 85; bits are zero-indexed */
+  return 85 + (85 << 8) + (85 << 16) + (85 << 24);
 }
 //3
 /* 
@@ -188,7 +195,9 @@ int evenBits(void) {
  *   Rating: 2
  */
 int isEqual(int x, int y) {
-  return 2;
+  /* x - y = x + -y = x + ~y + 1
+   * if x == y, x + -y = 0 */
+  return !(x + ~y + 1);
 }
 //4
 /* 
@@ -201,7 +210,12 @@ int isEqual(int x, int y) {
  *   Rating: 2
  */
 int fitsBits(int x, int n) {
-  return 2;
+  /* After shift = x >> (n - 1), positive numbers should
+   * only have zeroes left, or negative numbers should
+   * only have ones left and shift + 1 = 0 */
+  int shift;
+  shift = x >> (n + ~0);
+  return !shift | !(shift + 1);
 }
 //5
 /* 
@@ -212,7 +226,14 @@ int fitsBits(int x, int n) {
  *   Rating: 3
  */
 int conditional(int x, int y, int z) {
-  return 2;
+  /* If x is not 0, return y; if x is 0, return z */
+  int offset, mask;
+  /* If x isn't 0, we wanna return y, and an offset masked
+   * to 0
+   * If x is 0, we wanna return y + (offset & mask) */
+  offset = z + ~y + 1;
+  mask = (!x) << 31 >> 31;
+  return y + (offset & mask);
 }
 //6
 /* 
@@ -223,7 +244,25 @@ int conditional(int x, int y, int z) {
  *   Rating: 3
  */
 int isGreater(int x, int y) {
-  return 2;
+  /* If x > y, x - y - 1 is guaranteed to be 0 or positive.
+   * If x <= y, x - y - 1 is guaranteed to be negative.
+   * If x and y are positive, x - y is safe. Do that.
+   * If x > 0 and y < 0, return 1 (base1)
+   * If x < 0 and y > 0, return 0 (base2)
+   * If x and y are negative, add TMAX to each and then compute
+   * (base3). */
+  int xsign, ysign, cmp_x, cmp_y, offset, diff, mask, base1, base2, base3;
+  xsign = (x >> 31) + 1;
+  ysign = (y >> 31) + 1;
+  base1 = xsign & !ysign;
+  base2 = !xsign & ysign;
+  base3 = !xsign & !ysign;
+  offset = (base3 << 31 >> 31) & (1 << 31);
+  cmp_x = x + offset;
+  cmp_y = y + offset;
+  diff = cmp_x + ~cmp_y;
+  mask = diff >> 31;
+  return !base2 & (!mask | base1);
 }
 //7
 /*
@@ -238,7 +277,10 @@ int isGreater(int x, int y) {
  *   Rating: 3
  */
 int multFiveEighths(int x) {
-  return 2;
+  int prod, bias;
+  prod = x + x + x + x + x;
+  bias = (prod >> 31) & 7;
+  return (prod + bias) >> 3;
 }
 //8
 /* 
@@ -250,7 +292,25 @@ int multFiveEighths(int x) {
  *   Rating: 4 
  */
 int logicalNeg(int x) {
-  return 2;
+  /* Note that:
+   *
+   * Negative numbers always have a sign bit of 1, meaning they
+   * should always return 0.
+   * 
+   * For all positive numbers:
+   *   x ^ TMAX < TMAX
+   * For x = 0:
+   *   x ^ TMAX == TMAX
+   * Let xor be x ^ TMAX:
+   *   xor + 1 only switches signs with x if x was 0 or TMIN, but
+   *   we catch TMIN with the check for negative numbers. */
+  int signbit, tmax, xor, signafter, signcheck;
+  signbit = (x >> 31) + 1; /* 0 if negative, 1 if positive */
+  tmax = ~(1 << 31);
+  xor = x ^ tmax;
+  signafter = ((xor + 1) >> 31) + 1;
+  signcheck = signafter + ~signbit + 1; /* 1 if sign switch */
+  return signbit & signcheck;
 }
 //9
 /* 
@@ -263,7 +323,13 @@ int logicalNeg(int x) {
  *   Rating: 4
  */
 int twosComp2SignMag(int x) {
-  return 2;
+  /* Use an offset and a mask based on x's initial sign, and add
+   * offset = 2 * (TMIN - x) if negative? Then add the sign bit. */
+  int diff, offset, mask;
+  diff = (1 << 31) + ~x + 1;
+  offset = diff + diff;
+  mask = (x >> 31);
+  return x + (offset & mask) + (mask << 31);
 }
 //10
 /*
@@ -275,5 +341,22 @@ int twosComp2SignMag(int x) {
  *   Rating: 4
  */
 int isPower2(int x) {
-  return 2;
+  /* From Piazza: Note that the intersection of a power of 2 and
+   * its negative gives you the original number; this isn't the
+   * case for non-powers of 2. Then, just make sure it isn't
+   * TMIN (x & ~n == 0 if x != n)
+   *
+   * 8: 0b 0000 1000
+   * -8: 0b 1111 1000
+   *
+   * 5: 0b 0000 0101
+   * -5: 0b 1111 1011
+
+   * Make sure both sides of the & give 1
+   * Find the intersection of x and its negative; if x minus the
+   * intersection is 0, numbers are the same; just make sure it
+   * isn't TMIN */
+  int intersect;
+  intersect = x & (~x + 1);
+  return !(x + ~intersect + 1) & !!(x & ~(1 << 31));
 }
