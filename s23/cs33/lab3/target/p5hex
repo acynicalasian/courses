@@ -1,0 +1,8 @@
+/* Overall approach: */
+/* Move current value of %rsp into some register, then jump around */
+/* until we can move the middleman register value to %rdi? */
+/* > at buf[40], jump to some mov %rsp, any register */
+/* > at buf[48], store the string */
+/* > at buf[56], jump to some mov %rsp, a different register */
+/* > at buf[64], store 0 */
+/* > at buf[72], jump
