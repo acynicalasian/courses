@@ -1,0 +1,44 @@
+1.a) "(10, 10)"
+1.b) "(20, 30)"
+1.c) "(50, 10)"
+1.d) "(20, 30)"
+
+2a) class Point:
+	def __init__(self, x, y):
+		self.x_ = x
+		self.y_ = y
+
+	def display(self):
+		print("(" + self.x_ + ", " + self.y_ + ")")
+
+2b) (50, 10)
+
+3a)
+
+int find_biggest(int* arr, int size) {
+	if (size == 1)
+		return arr*;
+	else {
+		int a = arr*;
+		int b = find_biggest(++arr, --size);
+		return (a > b) ? a : b;
+}
+
+def find_biggest(arr, size):
+	if size == 1:
+		return arr[0]
+	else:
+		a = arr[0]
+		b = find_biggest(arr[1:], size - 1)
+		return a if (a > b) else b
+
+3b)
+
+int index_of_biggest(int* arr, int size) {
+	if (size == 1)
+		return 0;
+	else {
+		if (arr[0] > arr[1 + index_of_biggest(arr + 1, size - 1)])
+			
+			
+		
