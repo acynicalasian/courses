@@ -22,6 +22,7 @@ int find_biggest(int* arr, int size) {
 		int a = arr*;
 		int b = find_biggest(++arr, --size);
 		return (a > b) ? a : b;
+	}
 }
 
 def find_biggest(arr, size):
@@ -38,7 +39,14 @@ int index_of_biggest(int* arr, int size) {
 	if (size == 1)
 		return 0;
 	else {
-		if (arr[0] > arr[1 + index_of_biggest(arr + 1, size - 1)])
-			
-			
+		int next = 1 + index_of_biggest(++arr, --size);
+		return (arr[0] > arr[next]) ? 0 : next;
+	}
+	
+def index_of_biggest(arr, size):
+	if size == 1:
+		return 0
+	else:
+		next = 1 + index_of_biggest(arr[1:], size - 1)
+		return 0 if (arr[0] > arr[next]) else next
 		
