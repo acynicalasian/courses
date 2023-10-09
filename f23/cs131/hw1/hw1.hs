@@ -38,3 +38,18 @@ is_even_pattern x = is_even_pattern (x-2)
 
 is_odd_pattern :: Integer -> Bool
 is_odd_pattern x = is_even_pattern (x+1)
+
+count_occurrences :: [Integer] -> [Integer] -> Integer
+count_occurrences a b = case a of
+  [] -> 1
+  m:[] -> case b of
+    [] -> 0
+    n:[] -> if (m == n) then 1 else 0
+    n:rest -> case (m == n) of
+      True -> 1 + count_occurrences a rest
+      False -> 0 + count_occurrences a rest
+  m:rest -> case b of
+    [] -> 0
+    n:next -> case (m == n) of
+      True -> count_occurrences a next + count_occurrences rest next
+      False -> count_occurrences a next
