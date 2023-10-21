@@ -99,6 +99,7 @@ class Interpreter(intbase.InterpreterBase):
         if f.dict["name"] == "print":
             if len(f.dict["args"]) == 0:
                 super().output("")
+                return
             acc = ""
             for arg in f.dict["args"]:
                 if arg.elem_type in ['+', '-']:
