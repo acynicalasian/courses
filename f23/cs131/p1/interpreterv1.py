@@ -40,6 +40,8 @@ class Interpreter(intbase.InterpreterBase):
                               "Variable '" + vname + "' is not defined")
         elif rh_node.elem_type in ["int", "string"]:
             rh = rh_node.dict["val"]
+        elif rh_node.elem_type == "fcall":
+            rh = self.eval_fcall(rh_node)
         else:
             super().error(intbase.ErrorType.NAME_ERROR, "this shouldn't happen")
         self._vtable[lh] = rh
@@ -150,12 +152,11 @@ class Interpreter(intbase.InterpreterBase):
                     super().output(str(self.eval_fcall(prompt)))
                 else:
                     super().error(intbase.ErrorType.NAME_ERROR, "this shouldn't happen")
+                grab = super().get_input()
+                return grab
             elif len(f.dict["args"]) > 1:
                 super().error(intbase.ErrorType.NAME_ERROR,
                               "No inputi() function that takes > 1 parameter")
         else:
             super().error(intbase.ErrorType.NAME_ERROR,
                           "Function '" + f.dict["name"] + "' is not defined")
-
-            return int(super().get_input())
-        
