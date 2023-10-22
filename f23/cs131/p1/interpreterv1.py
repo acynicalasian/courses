@@ -59,10 +59,10 @@ class Interpreter(intbase.InterpreterBase):
         elif exp.dict["op1"].elem_type in ["int", "string"]:
             op1 = exp.dict["op1"].dict["val"]
         elif (exp.dict["op1"].elem_type == "fcall" and
-              exp.dict["op1"].name == "inputi"):
+              exp.dict["op1"].dict["name"] == "inputi"):
             op1 = self.eval_fcall(exp.dict["op1"])
         elif (exp.dict["op1"].elem_type == "fcall" and
-              exp.dict["op1"].name == "print"):
+              exp.dict["op1"].dict["name"] == "print"):
             super().error(intbase.ErrorType.TYPE_ERROR,
                           "Operand op1 is of invalid type void")
         else:
@@ -80,10 +80,10 @@ class Interpreter(intbase.InterpreterBase):
         elif exp.dict["op2"].elem_type in ["int", "string"]:
             op2 = exp.dict["op2"].dict["val"]
         elif (exp.dict["op2"].elem_type == "fcall" and
-              exp.dict["op2"].name == "inputi"):
+              exp.dict["op2"].dict["name"] == "inputi"):
             op2 = self.eval_fcall(exp.dict["op2"])
         elif (exp.dict["op2"].elem_type == "fcall" and
-              exp.dict["op2"].name == "print"):
+              exp.dict["op2"].dict["name"] == "print"):
             super().error(intbase.ErrorType.TYPE_ERROR,
                           "Operand op2 is of invalid type void")
         else:
@@ -101,7 +101,7 @@ class Interpreter(intbase.InterpreterBase):
         if f.dict["name"] == "print":
             if len(f.dict["args"]) == 0:
                 super().output("")
-                return
+                return "nil"
             acc = ""
             for arg in f.dict["args"]:
                 if arg.elem_type in ['+', '-']:
@@ -116,16 +116,17 @@ class Interpreter(intbase.InterpreterBase):
                     acc += str(tmpv)
                 elif arg.elem_type in ["int", "string"]:
                     acc += str(arg.dict["val"])
-                elif arg.elem_type == "fcall" and arg.name == "print":
+                elif arg.elem_type == "fcall" and arg.dict["name"] == "print":
                     super().error(intbase.ErrorType.TYPE_ERROR,
                                   """Argument to function 'print' cannot be of
                                   type void""")
-                elif arg.elem_type == "fcall" and arg.name == "inputi":
+                elif arg.elem_type == "fcall" and arg.dict["name"] == "inputi":
                     # I seriously doubt this would happen but...
                     acc += str(self.eval_fcall(arg))
                 else:
                     super().error(intbase.ErrorType.NAME_ERROR, "this shouldn't happen")
             super().output(acc)
+            return "nil"
         elif f.dict["name"] == "inputi":
             if len(f.dict["args"]) == 1:
                 prompt = f.dict["args"][0]
@@ -142,21 +143,26 @@ class Interpreter(intbase.InterpreterBase):
                     super().output(str(tmpv))
                 elif prompt.elem_type in ["int", "string"]:
                     super().output(str(prompt.dict["val"]))
-                elif prompt.elem_type == "fcall" and prompt.name == "print":
+                elif prompt.elem_type == "fcall" and prompt.dict["name"] == "print":
+                    # super().error(intbase.ErrorType.TYPE_ERROR,
+                    #               """Argument to function 'inputi' cannot be of
+                    #               type void""")
+
+                    # Apparently we can pass print() as an argument to inputi(); is
+                    # this the testcase3 I keep missing?
+                    super().output(self.eval_fcall(prompt))
+                elif prompt.elem_type == "fcall" and prompt.dict["name"] == "inputi":
+                    super().output(self.eval_fcall(prompt))
+                elif prompt.elem_type == "fcall" and prompt.dict["name"] == "main":
+                    # Is this the test case 3 I'm missing for input?
                     super().error(intbase.ErrorType.TYPE_ERROR,
-                                  """Argument to function 'inputi' cannot be of
-                                  type void""")
-                elif prompt.elem_type == "fcall" and prompt.name == "inputi":
-                    # Again, really doubt this will happen, but not explicitly
-                    # disallowed in the spec?
-                    super().output(str(self.eval_fcall(prompt)))
+                                  """Cannot call main() from within main()""")
                 else:
                     super().error(intbase.ErrorType.NAME_ERROR, "this shouldn't happen")
-                grab = super().get_input()
-                return grab
             elif len(f.dict["args"]) > 1:
                 super().error(intbase.ErrorType.NAME_ERROR,
                               "No inputi() function that takes > 1 parameter")
+            return int(super().get_input())
         else:
             super().error(intbase.ErrorType.NAME_ERROR,
                           "Function '" + f.dict["name"] + "' is not defined")
