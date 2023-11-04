@@ -3,7 +3,7 @@ import intbase
 import copy
 
 class Interpreter(intbase.InterpreterBase):
-    __binops = ['+', '-', '*', '/', "==", "!=", '<', "<=", '>', ">=", "||", "&&"]
+    __binops = ['+', '-', '*', '/', "==", "!=", '<', "<=", '>', ">="]
     __unops = ["neg", '!']
     __datatypes = ["int", "string", "bool"]
     
@@ -108,16 +108,14 @@ class Interpreter(intbase.InterpreterBase):
             else:
                 super().error(intbase.ErrorType.NAME_ERROR, "you messed up")
         if exp.elem_type == '+':
-            if ((isinstance(op[0], int) or isinstance(op[0], bool)) and
-                (isinstance(op[1], int) or isinstance(op[1], bool))):
+            if isinstance(op[0], int) and isinstance(op[1], int):
                 return op[0] + op[1]
             elif isinstance(op[0], str) and isinstance(op[1], str):
                 return op[0] + op[1]
             else:
                 self.binop_error(exp.elem_type, op[0], op[1])
         elif exp.elem_type in ['-', '*', '/']:
-            if ((isinstance(op[0], int) or isinstance(op[0], bool)) and
-                (isinstance(op[1], int) or isinstance(op[1], bool))):
+            if isinstance(op[0], int) and isinstance(op[1], int):
                 if exp.elem_type == '-':
                     return op[0] - op[1]
                 elif exp.elem_type == '*':
@@ -129,41 +127,26 @@ class Interpreter(intbase.InterpreterBase):
         elif exp.elem_type == "==":
             if type(op[0]) == type(op[1]):
                 return op[0] == op[1]
-            elif ((isinstance(op[0], bool) or isinstance(op[0], int)) and
-                  (isinstance(op[1], bool) or isinstance(op[1], int))):
-                return bool(op[0]) == bool(op[1])
             else:
                 return False
         elif exp.elem_type == "!=":
             if type(op[0]) == type(op[1]):
                 return op[0] != op[1]
-            elif ((isinstance(op[0], bool) or isinstance(op[0], int)) and
-                  (isinstance(op[1], bool) or isinstance(op[1], int))):
-                return bool(op[0]) != bool(op[1])
             else:
                 return True
         elif exp.elem_type in ['<', "<="]:
-            if ((isinstance(op[0], bool) or isinstance(op[0], int)) and
-                (isinstance(op[1], bool) or isinstance(op[1], int))):
-                return int(op[0]) < int(op[1]) if exp.elem_type == '<' else int(op[0]) <= int(op[1])
+            if isinstance(op[0], int) and isinstance(op[1], int):
+                return op[0] < op[1] if exp.elem_type == '<' else op[0] <= op[1]
             else:
                 self.binop_error(exp.elem_type, op[0], op[1])
         elif exp.elem_type in ['>', ">="]:
-            if ((isinstance(op[0], bool) or isinstance(op[0], int)) and
-                (isinstance(op[1], bool) or isinstance(op[1], int))):
-                return int(op[0]) > int(op[1]) if exp.elem_type == '>' else int(op[0]) >= int(op[1])
+            if isinstance(op[0], int) and isinstance(op[1], int):
+                return op[0] > op[1] if exp.elem_type == '>' else op[0] >= op[1]
             else:
                 self.binop_error(exp.elem_type, op[0], op[1])
         elif exp.elem_type in ["||", "&&"]:
             if isinstance(op[0], bool) and isinstance(op[1], bool):
                 return op[0] or op[1] if exp.elem_type == "||" else op[0] and op[1]
-            elif isinstance(op[0], int) and isinstance(op[1], bool):
-                return (op[0] != 0) or op[1] if exp.elem_type == "||" else (op[0] != 0) and op[1]
-            elif isinstance(op[0], bool) and isinstance(op[1], int):
-                return op[0] or (op[1] != 0) if exp.elem_type == "||" else op[0] and (op[1] != 0)
-            elif isinstance(op[0], int) and isinstance(op[1], int):
-                return ((op[0] != 0) or (op[1] != 0) if exp.elem_type == "||" else
-                        (op[1] != 0) and (op[1] != 0))
             else:
                 self.binop_error(exp.elem_type, op[0], op[1])
         else:
@@ -207,8 +190,6 @@ class Interpreter(intbase.InterpreterBase):
         elif exp.elem_type == '!':
             if isinstance(op, bool):
                 return not op
-            elif isinstance(op, int):
-                return not (op != 0)
             else:
                 super().error(intbase.ErrorType.TYPE_ERROR, "Incompatible type for ! operation")
         else:
@@ -270,9 +251,6 @@ class Interpreter(intbase.InterpreterBase):
             shadowed_vtable[vname] = args[i]
         for key in list(shadowed_vtable):
             local_vtable[key] = shadowed_vtable[key]
-        for key in list(original_vtable):    # realign the deep copy, except shadowed vars
-            if key not in list(shadowed_vtable):
-                local_vtable[key] = original_vtable[key]
         for s in f.dict["statements"]:
             if s.elem_type == '=':
                 vname = s.dict["name"]
@@ -298,7 +276,7 @@ class Interpreter(intbase.InterpreterBase):
                     return out
             elif s.elem_type == "return":
                 return self.eval_return(s, local_vtable)
-        return None
+            return None
 
     def eval_print(self, f, local_vtable):
         if len(f.dict["args"]) == 0:
@@ -307,13 +285,7 @@ class Interpreter(intbase.InterpreterBase):
         acc = ""
         for arg in f.dict["args"]:
             if arg.elem_type in Interpreter.__binops:
-                bop = self.eval_binop(arg, local_vtable)
-                if bop and isinstance(bop, bool):
-                    acc += "true"
-                elif not bop and isinstance(bop, bool):
-                    acc += "false"
-                else:
-                    acc += str(bop)
+                acc += str(self.eval_binop(arg, local_vtable))
             elif arg.elem_type == "nil":
                 acc += "nil"
             else:
@@ -408,8 +380,8 @@ class Interpreter(intbase.InterpreterBase):
                 out = exp.dict["val"]
             elif exp.elem_type == "fcall":
                 out = self.eval_fcall(exp, local_vtable)
-            # else:
-            #     super().error(intbase.ErrorType.NAME_ERROR, "smth is wrong")
+            else:
+                super().error(intbase.ErrorType.NAME_ERROR, "smth is wrong")
         return out
 
     def eval_if(self, chk, local_vtable):

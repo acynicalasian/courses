@@ -3,7 +3,7 @@ import intbase
 import copy
 
 class Interpreter(intbase.InterpreterBase):
-    __binops = ['+', '-', '*', '/', "==", "!=", '<', "<=", '>', ">=", "||", "&&"]
+    __binops = ['+', '-', '*', '/', "==", "!=", '<', "<=", '>', ">="]
     __unops = ["neg", '!']
     __datatypes = ["int", "string", "bool"]
     
@@ -270,9 +270,6 @@ class Interpreter(intbase.InterpreterBase):
             shadowed_vtable[vname] = args[i]
         for key in list(shadowed_vtable):
             local_vtable[key] = shadowed_vtable[key]
-        for key in list(original_vtable):    # realign the deep copy, except shadowed vars
-            if key not in list(shadowed_vtable):
-                local_vtable[key] = original_vtable[key]
         for s in f.dict["statements"]:
             if s.elem_type == '=':
                 vname = s.dict["name"]
@@ -298,7 +295,7 @@ class Interpreter(intbase.InterpreterBase):
                     return out
             elif s.elem_type == "return":
                 return self.eval_return(s, local_vtable)
-        return None
+            return None
 
     def eval_print(self, f, local_vtable):
         if len(f.dict["args"]) == 0:
@@ -307,13 +304,7 @@ class Interpreter(intbase.InterpreterBase):
         acc = ""
         for arg in f.dict["args"]:
             if arg.elem_type in Interpreter.__binops:
-                bop = self.eval_binop(arg, local_vtable)
-                if bop and isinstance(bop, bool):
-                    acc += "true"
-                elif not bop and isinstance(bop, bool):
-                    acc += "false"
-                else:
-                    acc += str(bop)
+                acc += str(self.eval_binop(arg, local_vtable))
             elif arg.elem_type == "nil":
                 acc += "nil"
             else:
@@ -410,6 +401,7 @@ class Interpreter(intbase.InterpreterBase):
                 out = self.eval_fcall(exp, local_vtable)
             # else:
             #     super().error(intbase.ErrorType.NAME_ERROR, "smth is wrong")
+        print("return val: " + str(out))
         return out
 
     def eval_if(self, chk, local_vtable):
