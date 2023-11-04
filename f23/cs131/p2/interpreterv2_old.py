@@ -234,20 +234,17 @@ class Interpreter(intbase.InterpreterBase):
         for i in range(len(args)):
             vname = f.dict["args"][i].dict["name"]
             local_vtable[vname] = args[i]
-        scope_vtable = copy.deepcopy(self.__vtable)
-        for key in list(local_vtable):
-            scope_vtable[key] = local_vtable[key]
         for s in f.dict["statements"]:
             if s.elem_type == '=':
-                self.eval_assign(s, scope_vtable)
+                self.eval_assign(s, local_vtable)
             elif s.elem_type == "fcall":
-                self.eval_fcall(s, scope_vtable)
+                self.eval_fcall(s, local_vtable)
             elif s.elem_type == "if":
-                self.eval_if(s, scope_vtable)
+                self.eval_if(s, local_vtable)
             elif s.elem_type == "while":
-                self.eval_while(s, scope_vtable)
+                self.eval_while(s, local_vtable)
             elif s.elem_type == "return":
-                return self.eval_return(s, scope_vtable)
+                return self.eval_return(s, local_vtable)
         return None
 
     def eval_print(self, f, local_vtable):
@@ -385,19 +382,12 @@ class Interpreter(intbase.InterpreterBase):
                 elif s.elem_type == "fcall":
                     self.eval_fcall(s, local_vtable)
                 elif s.elem_type == "if":
-                    self.eval_if(s, copy.deepcopy(local_vtable))
+                    self.eval_if(s, local_vtable)
                 elif s.elem_type == "while":
-                    self.eval_while(s, copy.deepcopy(local_vtable))
+                    self.eval_while(s, local_vtable)
                 elif s.elem_type == "return":
-                    out = self.eval_return(s, local_vtable)
-                    for key in list(local_vtable):
-                        if key in self.__vtable:
-                            self.__vtable[key] = local_vtable[key]
-                    return out
-            for key in list(local_vtable):
-                if key in self.__vtable:
-                    self.__vtable[key] = local_vtable[key]
-                return
+                    return self.eval_return(s, local_vtable)
+            return
         else:
             if chk.dict["else_statements"] is None:
                 return
@@ -449,13 +439,7 @@ class Interpreter(intbase.InterpreterBase):
                 elif s.elem_type == "while":
                     self.eval_while(s, local_vtable)
                 elif s.elem_type == "return":
-                    out = self.eval_return(s, local_vtable)
-                    for key in local_vtable:
-                        if key in self.__vtable:
-                            self.__vtable[key] = local_vtable[key]
-                    return out
+                    return self.eval_return(s, local_vtable)
             self.eval_while(chk, local_vtable)
         else:
-            for key in local_vtable:
-                if key in self.__vtable:
-                    self.__vtable[key] = local_vtable[key]
+            return
