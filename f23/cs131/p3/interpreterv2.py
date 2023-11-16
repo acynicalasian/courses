@@ -1,313 +1,560 @@
-import copy
-from enum import Enum
-
 from brewparse import parse_program
-from env_v2 import EnvironmentManager
-from intbase import InterpreterBase, ErrorType
-from type_valuev2 import Type, Value, create_value, get_printable
+import intbase
+import copy
 
-
-class ExecStatus(Enum):
-    CONTINUE = 1
-    RETURN = 2
-
-
-# Main interpreter class
-class Interpreter(InterpreterBase):
-    # constants
-    NIL_VALUE = create_value(InterpreterBase.NIL_DEF)
-    TRUE_VALUE = create_value(InterpreterBase.TRUE_DEF)
-    BIN_OPS = {"+", "-", "*", "/", "==", "!=", ">", ">=", "<", "<=", "||", "&&"}
-
-    # methods
+class Interpreter(intbase.InterpreterBase):
+    __binops = ['+', '-', '*', '/', "==", "!=", '<', "<=", '>', ">=", "||", "&&"]
+    __unops = ["neg", '!']
+    __datatypes = ["int", "string", "bool"]
+    
     def __init__(self, console_output=True, inp=None, trace_output=False):
         super().__init__(console_output, inp)
-        self.trace_output = trace_output
-        self.__setup_ops()
+        self.__vtable = dict()    # vtable for main()
+        self.__ftable = dict()    # ftable for main()
 
-    # run a program that's provided in a string
-    # usese the provided Parser found in brewparse.py to parse the program
-    # into an abstract syntax tree (ast)
+        # For returning from inside if and while blocks
+        self.__nestedbreak = { "flag" : False, "value" : None }
+
     def run(self, program):
-        ast = parse_program(program)
-        self.__set_up_function_table(ast)
-        self.env = EnvironmentManager()
-        main_func = self.__get_func_by_name("main", 0)
-        self.__run_statements(main_func.get("statements"))
+        parsed_program = parse_program(program)
+        if len(parsed_program.dict["functions"]) < 1:
+            super().error(intbase.ErrorType.NAME_ERROR,
+                          "No main() function was found")
 
-    def __set_up_function_table(self, ast):
-        self.func_name_to_ast = {}
-        for func_def in ast.get("functions"):
-            func_name = func_def.get("name")
-            num_params = len(func_def.get("args"))
-            if func_name not in self.func_name_to_ast:
-                self.func_name_to_ast[func_name] = {}
-            self.func_name_to_ast[func_name][num_params] = func_def
+        # Store a function table and a pointer to the main function
+        found_main = False
+        main = None
+        for f in parsed_program.dict["functions"]:
+            fname = f.dict["name"]
+            if fname == "main":
+                found_main = True
+                main = f
+            else:
+                try:
+                    keyexists = self.__ftable[fname]
+                except KeyError:
+                    self.__ftable[fname] = []
+                self.__ftable[fname].append(f)
+        if found_main == False:
+            super().error(intbase.ErrorType.NAME_ERROR,
+                          "No main() function was found")
 
-    def __get_func_by_name(self, name, num_params):
-        if name not in self.func_name_to_ast:
-            super().error(ErrorType.NAME_ERROR, f"Function {name} not found")
-        candidate_funcs = self.func_name_to_ast[name]
-        if num_params not in candidate_funcs:
-            super().error(
-                ErrorType.NAME_ERROR,
-                f"Function {name} taking {num_params} params not found",
-            )
-        return candidate_funcs[num_params]
+        for s in main.dict["statements"]:
+            if s.elem_type == '=':
+                self.eval_assign(s, self.__vtable)
+            elif s.elem_type == "fcall":
+                self.eval_fcall(s, self.__vtable)
+            elif s.elem_type == "if":
+                self.eval_if(s, self.__vtable)
+                if self.__nestedbreak["flag"]:
+                    return self.__nestedbreak["value"]
+            elif s.elem_type == "while":
+                self.eval_while(s, self.__vtable)
+                if self.__nestedbreak["flag"]:
+                    return self.__nestedbreak["value"]
+            elif s.elem_type == "return":
+                return self.eval_return(s, self.__vtable)
+        return 0
+            
+    def eval_assign(self, s, local_vtable):
+        lh = s.dict["name"]
+        rh_node = s.dict["expression"]
+        rh = None
+        if rh_node.elem_type in self.__binops:
+            rh = self.eval_binop(rh_node, local_vtable)
+        if rh_node.elem_type in Interpreter.__unops:
+            rh = self.eval_unary(rh_node, local_vtable)
+        elif rh_node.elem_type == "var":
+            try:
+                vname = rh_node.dict["name"]
+                rh = local_vtable[vname]
+            except KeyError:
+                super().error(intbase.ErrorType.NAME_ERROR,
+                              "Variable '" + vname + "' is not defined")
+        elif rh_node.elem_type in Interpreter.__datatypes:
+            rh = rh_node.dict["val"]
+        elif rh_node.elem_type == "nil":
+            rh = None
+        elif rh_node.elem_type == "fcall":
+            rh = self.eval_fcall(rh_node, local_vtable)
+        # else:
+        #     print(f"rh_node.elem_type: {rh_node.elem_type}")
+        #     print(f"rh value: {rh}")
+        #     super().error(intbase.ErrorType.NAME_ERROR, "you missed a case")
+        local_vtable[lh] = rh
+        return None
 
-    def __run_statements(self, statements):
-        self.env.push()
-        for statement in statements:
-            if self.trace_output:
-                print(statement)
-            status = ExecStatus.CONTINUE
-            if statement.elem_type == InterpreterBase.FCALL_DEF:
-                self.__call_func(statement)
-            elif statement.elem_type == "=":
-                self.__assign(statement)
-            elif statement.elem_type == InterpreterBase.RETURN_DEF:
-                status, return_val = self.__do_return(statement)
-            elif statement.elem_type == Interpreter.IF_DEF:
-                status, return_val = self.__do_if(statement)
-            elif statement.elem_type == Interpreter.WHILE_DEF:
-                status, return_val = self.__do_while(statement)
-
-            if status == ExecStatus.RETURN:
-                self.env.pop()
-                return (status, return_val)
-
-        self.env.pop()
-        return (ExecStatus.CONTINUE, Interpreter.NIL_VALUE)
-
-    def __call_func(self, call_node):
-        func_name = call_node.get("name")
-        if func_name == "print":
-            return self.__call_print(call_node)
-        if func_name == "inputi":
-            return self.__call_input(call_node)
-        if func_name == "inputs":
-            return self.__call_input(call_node)
-
-        actual_args = call_node.get("args")
-        func_ast = self.__get_func_by_name(func_name, len(actual_args))
-        formal_args = func_ast.get("args")
-        if len(actual_args) != len(formal_args):
-            super().error(
-                ErrorType.NAME_ERROR,
-                f"Function {func_ast.get('name')} with {len(actual_args)} args not found",
-            )
-        self.env.push()
-        for formal_ast, actual_ast in zip(formal_args, actual_args):
-            result = copy.deepcopy(self.__eval_expr(actual_ast))
-            arg_name = formal_ast.get("name")
-            self.env.create(arg_name, result)
-        _, return_val = self.__run_statements(func_ast.get("statements"))
-        self.env.pop()
-        return return_val
-
-    def __call_print(self, call_ast):
-        output = ""
-        for arg in call_ast.get("args"):
-            result = self.__eval_expr(arg)  # result is a Value object
-            output = output + get_printable(result)
-        super().output(output)
-        return Interpreter.NIL_VALUE
-
-    def __call_input(self, call_ast):
-        args = call_ast.get("args")
-        if args is not None and len(args) == 1:
-            result = self.__eval_expr(args[0])
-            super().output(get_printable(result))
-        elif args is not None and len(args) > 1:
-            super().error(
-                ErrorType.NAME_ERROR, "No inputi() function that takes > 1 parameter"
-            )
-        inp = super().get_input()
-        if call_ast.get("name") == "inputi":
-            return Value(Type.INT, int(inp))
-        if call_ast.get("name") == "inputs":
-            return Value(Type.STRING, inp)
-
-    def __assign(self, assign_ast):
-        var_name = assign_ast.get("name")
-        value_obj = self.__eval_expr(assign_ast.get("expression"))
-        self.env.set(var_name, value_obj)
-
-    def __eval_expr(self, expr_ast):
-        # print("here expr")
-        # print("type: " + str(expr_ast.elem_type))
-        if expr_ast.elem_type == InterpreterBase.NIL_DEF:
-            # print("getting as nil")
-            return Interpreter.NIL_VALUE
-        if expr_ast.elem_type == InterpreterBase.INT_DEF:
-            return Value(Type.INT, expr_ast.get("val"))
-        if expr_ast.elem_type == InterpreterBase.STRING_DEF:
-            # print("getting as str")
-            return Value(Type.STRING, expr_ast.get("val"))
-        if expr_ast.elem_type == InterpreterBase.BOOL_DEF:
-            return Value(Type.BOOL, expr_ast.get("val"))
-        if expr_ast.elem_type == InterpreterBase.VAR_DEF:
-            var_name = expr_ast.get("name")
-            val = self.env.get(var_name)
-            if val is None:
-                super().error(ErrorType.NAME_ERROR, f"Variable {var_name} not found")
-            return val
-        if expr_ast.elem_type == InterpreterBase.FCALL_DEF:
-            return self.__call_func(expr_ast)
-        if expr_ast.elem_type in Interpreter.BIN_OPS:
-            return self.__eval_op(expr_ast)
-        if expr_ast.elem_type == Interpreter.NEG_DEF:
-            return self.__eval_unary(expr_ast, Type.INT, lambda x: -1 * x)
-        if expr_ast.elem_type == Interpreter.NOT_DEF:
-            return self.__eval_unary(expr_ast, Type.BOOL, lambda x: not x)
-
-    def __eval_op(self, arith_ast):
-        left_value_obj = self.__eval_expr(arith_ast.get("op1"))
-        right_value_obj = self.__eval_expr(arith_ast.get("op2"))
-        if not self.__compatible_types(
-            arith_ast.elem_type, left_value_obj, right_value_obj
-        ):
-            super().error(
-                ErrorType.TYPE_ERROR,
-                f"Incompatible types for {arith_ast.elem_type} operation",
-            )
-        if arith_ast.elem_type not in self.op_to_lambda[left_value_obj.type()]:
-            super().error(
-                ErrorType.TYPE_ERROR,
-                f"Incompatible operator {arith_ast.elem_type} for type {left_value_obj.type()}",
-            )
-        f = self.op_to_lambda[left_value_obj.type()][arith_ast.elem_type]
-        # print("here eval")
-        # print(arith_ast)
-        # print("evaluating " + str(left_value_obj.type()) + " " + str(arith_ast.elem_type))
-        # print("obj left: " + str(left_value_obj.value()))
-        return f(left_value_obj, right_value_obj)
-
-    def __compatible_types(self, oper, obj1, obj2):
-        # DOCUMENT: allow comparisons ==/!= of anything against anything
-        if oper in ["==", "!="]:
-            return True
-        return obj1.type() == obj2.type()
-
-    def __eval_unary(self, arith_ast, t, f):
-        value_obj = self.__eval_expr(arith_ast.get("op1"))
-        if value_obj.type() != t:
-            super().error(
-                ErrorType.TYPE_ERROR,
-                f"Incompatible type for {arith_ast.elem_type} operation",
-            )
-        return Value(t, f(value_obj.value()))
-
-    def __setup_ops(self):
-        self.op_to_lambda = {}
-        # set up operations on integers
-        self.op_to_lambda[Type.INT] = {}
-        self.op_to_lambda[Type.INT]["+"] = lambda x, y: Value(
-            x.type(), x.value() + y.value()
-        )
-        self.op_to_lambda[Type.INT]["-"] = lambda x, y: Value(
-            x.type(), x.value() - y.value()
-        )
-        self.op_to_lambda[Type.INT]["*"] = lambda x, y: Value(
-            x.type(), x.value() * y.value()
-        )
-        self.op_to_lambda[Type.INT]["/"] = lambda x, y: Value(
-            x.type(), x.value() // y.value()
-        )
-        self.op_to_lambda[Type.INT]["=="] = lambda x, y: Value(
-            Type.BOOL, x.type() == y.type() and x.value() == y.value()
-        )
-        self.op_to_lambda[Type.INT]["!="] = lambda x, y: Value(
-            Type.BOOL, x.type() != y.type() or x.value() != y.value()
-        )
-        self.op_to_lambda[Type.INT]["<"] = lambda x, y: Value(
-            Type.BOOL, x.value() < y.value()
-        )
-        self.op_to_lambda[Type.INT]["<="] = lambda x, y: Value(
-            Type.BOOL, x.value() <= y.value()
-        )
-        self.op_to_lambda[Type.INT][">"] = lambda x, y: Value(
-            Type.BOOL, x.value() > y.value()
-        )
-        self.op_to_lambda[Type.INT][">="] = lambda x, y: Value(
-            Type.BOOL, x.value() >= y.value()
-        )
-        #  set up operations on strings
-        self.op_to_lambda[Type.STRING] = {}
-        self.op_to_lambda[Type.STRING]["+"] = lambda x, y: Value(
-            x.type(), x.value() + y.value()
-        )
-        self.op_to_lambda[Type.STRING]["=="] = lambda x, y: Value(
-            Type.BOOL, x.value() == y.value()
-        )
-        self.op_to_lambda[Type.STRING]["!="] = lambda x, y: Value(
-            Type.BOOL, x.value() != y.value()
-        )
-        #  set up operations on bools
-        self.op_to_lambda[Type.BOOL] = {}
-        self.op_to_lambda[Type.BOOL]["&&"] = lambda x, y: Value(
-            x.type(), x.value() and y.value()
-        )
-        self.op_to_lambda[Type.BOOL]["||"] = lambda x, y: Value(
-            x.type(), x.value() or y.value()
-        )
-        self.op_to_lambda[Type.BOOL]["=="] = lambda x, y: Value(
-            Type.BOOL, x.type() == y.type() and x.value() == y.value()
-        )
-        self.op_to_lambda[Type.BOOL]["!="] = lambda x, y: Value(
-            Type.BOOL, x.type() != y.type() or x.value() != y.value()
-        )
-
-        #  set up operations on nil
-        self.op_to_lambda[Type.NIL] = {}
-        self.op_to_lambda[Type.NIL]["=="] = lambda x, y: Value(
-            Type.BOOL, x.type() == y.type() and x.value() == y.value()
-        )
-        self.op_to_lambda[Type.NIL]["!="] = lambda x, y: Value(
-            Type.BOOL, x.type() != y.type() or x.value() != y.value()
-        )
-
-    def __do_if(self, if_ast):
-        cond_ast = if_ast.get("condition")
-        result = self.__eval_expr(cond_ast)
-        if result.type() != Type.BOOL:
-            super().error(
-                ErrorType.TYPE_ERROR,
-                "Incompatible type for if condition",
-            )
-        if result.value():
-            statements = if_ast.get("statements")
-            status, return_val = self.__run_statements(statements)
-            return (status, return_val)
+    def eval_binop(self, exp, local_vtable):
+        op = [None, None]
+        for i in [0, 1]:
+            opn = "op" + str(i+1) 
+            if exp.dict[opn].elem_type in Interpreter.__binops:
+                op[i] = self.eval_binop(exp.dict[opn], local_vtable)
+            elif exp.dict[opn].elem_type in Interpreter.__unops:
+                op[i] = self.eval_unary(exp.dict[opn], local_vtable)
+            elif exp.dict[opn].elem_type == "var":
+                try:
+                    vname = exp.dict[opn].dict["name"]
+                    op[i] = local_vtable[vname]
+                except KeyError:
+                    super().error(intbase.ErrorType.NAME_ERROR,
+                                  "Variable '" + vname + "' is not defined")
+            elif exp.dict[opn].elem_type in Interpreter.__datatypes:
+                op[i] = exp.dict[opn].dict["val"]
+            elif exp.dict[opn].elem_type == "nil":
+                op[i] = None
+            elif exp.dict[opn].elem_type == "fcall":
+                op[i] = self.eval_fcall(exp.dict[opn], local_vtable)
+            else:
+                super().error(intbase.ErrorType.NAME_ERROR, "you messed up")
+        if exp.elem_type == '+':
+            if ((isinstance(op[0], int) or isinstance(op[0], bool)) and
+                (isinstance(op[1], int) or isinstance(op[1], bool))):
+                return op[0] + op[1]
+            elif isinstance(op[0], str) and isinstance(op[1], str):
+                return op[0] + op[1]
+            else:
+                self.binop_error(exp.elem_type, op[0], op[1])
+        elif exp.elem_type in ['-', '*', '/']:
+            if ((isinstance(op[0], int) or isinstance(op[0], bool)) and
+                (isinstance(op[1], int) or isinstance(op[1], bool))):
+                if exp.elem_type == '-':
+                    return op[0] - op[1]
+                elif exp.elem_type == '*':
+                    return op[0] * op[1]
+                else:
+                    return op[0] // op[1]
+            else:
+                self.binop_error(exp.elem_type, op[0], op[1])
+        elif exp.elem_type == "==":
+            if type(op[0]) == type(op[1]):
+                return op[0] == op[1]
+            elif ((isinstance(op[0], bool) or isinstance(op[0], int)) and
+                  (isinstance(op[1], bool) or isinstance(op[1], int))):
+                return bool(op[0]) == bool(op[1])
+            else:
+                return False
+        elif exp.elem_type == "!=":
+            if type(op[0]) == type(op[1]):
+                return op[0] != op[1]
+            elif ((isinstance(op[0], bool) or isinstance(op[0], int)) and
+                  (isinstance(op[1], bool) or isinstance(op[1], int))):
+                return bool(op[0]) != bool(op[1])
+            else:
+                return True
+        elif exp.elem_type in ['<', "<="]:
+            if ((isinstance(op[0], bool) or isinstance(op[0], int)) and
+                (isinstance(op[1], bool) or isinstance(op[1], int))):
+                return int(op[0]) < int(op[1]) if exp.elem_type == '<' else int(op[0]) <= int(op[1])
+            else:
+                self.binop_error(exp.elem_type, op[0], op[1])
+        elif exp.elem_type in ['>', ">="]:
+            if ((isinstance(op[0], bool) or isinstance(op[0], int)) and
+                (isinstance(op[1], bool) or isinstance(op[1], int))):
+                return int(op[0]) > int(op[1]) if exp.elem_type == '>' else int(op[0]) >= int(op[1])
+            else:
+                self.binop_error(exp.elem_type, op[0], op[1])
+        elif exp.elem_type in ["||", "&&"]:
+            if isinstance(op[0], bool) and isinstance(op[1], bool):
+                return op[0] or op[1] if exp.elem_type == "||" else op[0] and op[1]
+            elif isinstance(op[0], int) and isinstance(op[1], bool):
+                return (op[0] != 0) or op[1] if exp.elem_type == "||" else (op[0] != 0) and op[1]
+            elif isinstance(op[0], bool) and isinstance(op[1], int):
+                return op[0] or (op[1] != 0) if exp.elem_type == "||" else op[0] and (op[1] != 0)
+            elif isinstance(op[0], int) and isinstance(op[1], int):
+                return ((op[0] != 0) or (op[1] != 0) if exp.elem_type == "||" else
+                        (op[1] != 0) and (op[1] != 0))
+            else:
+                self.binop_error(exp.elem_type, op[0], op[1])
         else:
-            else_statements = if_ast.get("else_statements")
-            if else_statements is not None:
-                status, return_val = self.__run_statements(else_statements)
-                return (status, return_val)
+            super().error(intbase.ErrorType.NAME_ERROR, "you messed up")
 
-        return (ExecStatus.CONTINUE, Interpreter.NIL_VALUE)
+    def binop_error(self, op, a, b):
+        if type(a) == type(b):
+            super().error(intbase.ErrorType.TYPE_ERROR,
+                          "Incompatible operator " + op + " for type Type." +
+                          str(a.__class__.__name__).upper())
+        else:
+            super().error(intbase.ErrorType.TYPE_ERROR,
+                          "Incompatible types for " + op + " operation")
+            
+    def eval_unary(self, exp, local_vtable):
+        if exp.dict["op1"].elem_type in ['+', '-', '*', '/', "==", "!=", '<', "<=", '>', ">=",
+                                         "||", "&&"]:
+            op = self.eval_binop(exp.dict["op1"], local_vtable)
+        elif exp.dict["op1"].elem_type in ["neg", '!']:
+            op = self.eval_unary(exp.dict["op1"], local_vtable)
+        elif exp.dict["op1"].elem_type == "var":
+            try:
+                vname = exp.dict["op1"].dict["name"]
+                op = local_vtable[vname]
+            except KeyError:
+                super().error(intbase.ErrorType.NAME_ERROR,
+                              "Variable '" + vname + "' is not defined")
+        elif exp.dict["op1"].elem_type in ["int", "string", "bool"]:
+            op = exp.dict["op1"].dict["val"]
+        elif exp.dict["op1"].elem_type == "nil":
+            op = None
+        elif exp.dict["op1"].elem_type == "fcall":
+            op = self.eval_fcall(exp.dict["op1"], local_vtable)
+        else:
+            super().error(intbase.ErrorType.NAME_ERROR, "you messed up")
+        if exp.elem_type == "neg":
+            if isinstance(op, int):
+                return -(op)
+            else:
+                super().error(intbase.ErrorType.TYPE_ERROR, "Incompatible type for neg operation")
+        elif exp.elem_type == '!':
+            if isinstance(op, bool):
+                return not op
+            elif isinstance(op, int):
+                return not (op != 0)
+            else:
+                super().error(intbase.ErrorType.TYPE_ERROR, "Incompatible type for ! operation")
+        else:
+            super().error(intbase.ErrorType.NAME_ERROR, "you messed up")
 
-    def __do_while(self, while_ast):
-        cond_ast = while_ast.get("condition")
-        run_while = Interpreter.TRUE_VALUE
-        while run_while.value():
-            run_while = self.__eval_expr(cond_ast)
-            if run_while.type() != Type.BOOL:
-                super().error(
-                    ErrorType.TYPE_ERROR,
-                    "Incompatible type for while condition",
-                )
-            if run_while.value():
-                statements = while_ast.get("statements")
-                status, return_val = self.__run_statements(statements)
-                if status == ExecStatus.RETURN:
-                    return status, return_val
+    def eval_fcall(self, call, local_vtable):
+        fname = call.dict["name"]
+        if fname == "print":
+            return self.eval_print(call, local_vtable)
+        elif fname == "inputi":
+            return self.eval_input(call, "int", local_vtable)
+        elif fname == "inputs":
+            return self.eval_input(call, "str", local_vtable)
 
-        return (ExecStatus.CONTINUE, Interpreter.NIL_VALUE)
+        # Look for the correct function type signature
+        try:
+            sig = self.__ftable[fname]
+        except KeyError:
+            super().error(intbase.ErrorType.NAME_ERROR, "Function " + fname + "not found")
+        f = None
+        for g in sig:
+            if len(g.dict["args"]) == len(call.dict["args"]):
+                f = g
+                break
+        if f is None:
+            super().error(intbase.ErrorType.NAME_ERROR,
+                          "No " + fname + "() function that takes " +
+                          str(len(call.dict["args"])) + " parameter(s)")
+        
+        args = []
+        for arg in call.dict["args"]:
+            if arg.elem_type in Interpreter.__binops:
+                args.append(self.eval_binop(arg, local_vtable))
+            elif arg.elem_type in Interpreter.__unops:
+                args.append(self.eval_unary(arg, local_vtable))
+            elif arg.elem_type == "var":
+                try:
+                    vname = arg.dict["name"]
+                    vval = local_vtable[vname]
+                except KeyError:
+                    super().error(intbase.ErrorType.NAME_ERROR,
+                                  "Variable '" + vname + "' is not defined")
+                args.append(vval)
+            elif arg.elem_type in Interpreter.__datatypes:
+                args.append(arg.dict["val"])
+            elif arg.elem_type == "nil":
+                args.append(None)
+            elif arg.elem_type == "fcall":
+                args.append(self.eval_fcall(arg, local_vtable))
+            else:
+                super().error(intbase.ErrorType.NAME_ERROR, "you missed a case")
+        return self.eval_fdef(f, args, copy.deepcopy(local_vtable), local_vtable)
 
-    def __do_return(self, return_ast):
-        expr_ast = return_ast.get("expression")
-        if expr_ast is None:
-            return (ExecStatus.RETURN, Interpreter.NIL_VALUE)
-        value_obj = copy.deepcopy(self.__eval_expr(expr_ast))
-        return (ExecStatus.RETURN, value_obj)
+    def eval_fdef(self, f, args, local_vtable, original_vtable):
+        shadowed_vtable = dict()
+        block_vtable = []
+        for i in range(len(args)):
+            vname = f.dict["args"][i].dict["name"]
+            shadowed_vtable[vname] = args[i]
+        for key in list(shadowed_vtable):
+            local_vtable[key] = shadowed_vtable[key]
+        for key in list(original_vtable):    # realign the deep copy, except shadowed vars
+            if key not in list(shadowed_vtable):
+                local_vtable[key] = original_vtable[key]
+        for s in f.dict["statements"]:
+            if s.elem_type == '=':
+                vname = s.dict["name"]
+                # dynamically in scope, not shadowed
+                if vname not in list(shadowed_vtable) and vname in list(original_vtable):
+                    self.eval_assign(s, original_vtable)
+                self.eval_assign(s, local_vtable)
+            elif s.elem_type == "fcall":
+                self.eval_fcall(s, local_vtable)
+            elif s.elem_type == "if":
+                self.eval_if(s, local_vtable)
+                if self.__nestedbreak["flag"]:
+                    out = self.__nestedbreak["value"]
+                    self.__nestedbreak["flag"] = False
+                    self.__nestedbreak["value"] = None
+                    return out
+            elif s.elem_type == "while":
+                self.eval_while(s, local_vtable)
+                if self.__nestedbreak["flag"]:
+                    out = self.__nestedbreak["value"]
+                    self.__nestedbreak["flag"] = False
+                    self.__nestedbreak["value"] = None
+                    return out
+            elif s.elem_type == "return":
+                return self.eval_return(s, local_vtable)
+        return None
+
+    def eval_print(self, f, local_vtable):
+        if len(f.dict["args"]) == 0:
+            super().output("")
+            return None
+        acc = ""
+        for arg in f.dict["args"]:
+            if arg.elem_type in Interpreter.__binops:
+                bop = self.eval_binop(arg, local_vtable)
+                if bop and isinstance(bop, bool):
+                    acc += "true"
+                elif not bop and isinstance(bop, bool):
+                    acc += "false"
+                else:
+                    acc += str(bop)
+            elif arg.elem_type == "nil":
+                acc += "nil"
+            else:
+                if arg.elem_type in Interpreter.__unops:
+                    aval = self.eval_unary(arg, local_vtable)
+                elif arg.elem_type == "var":
+                    try:
+                        vname = arg.dict["name"]
+                        aval = local_vtable[vname]
+                    except KeyError:
+                        super().error(intbase.ErrorType.NAME_ERROR,
+                                      "Variable '" + vname + "' is not defined")
+                elif arg.elem_type in Interpreter.__datatypes:
+                    aval = arg.dict["val"]
+                elif arg.elem_type == "fcall":
+                    aval = self.eval_fcall(arg, local_vtable)
+                else:
+                    super().error(intbase.ErrorType.NAME_ERROR, "smth is wrong")
+                if isinstance(aval, int):
+                    acc += str(aval)
+                elif isinstance(aval, bool):
+                    if aval:
+                        acc += "true"
+                    else:
+                        acc += "false"
+                elif aval is None:
+                    acc += "nil"
+                else:
+                    acc += aval
+        super().output(acc)
+        return None
+
+    def eval_input(self, f, itype, local_vtable):
+        if len(f.dict["args"]) > 1:
+            super().error(intbase.ErrorType.NAME_ERROR,
+                          "No inputi() function that takes > 1 parameter")
+        if len(f.dict["args"]) == 1:
+            prompt = f.dict["args"][0]
+            if prompt.elem_type in Interpreter.__binops:
+                super().output(str(self.eval_binop(prompt, local_vtable)))
+            elif prompt.elem_type == "nil":
+                super().output("nil")
+            else:
+                if prompt.elem_type in Interpreter.__unops:
+                    pval = self.eval_unary(prompt, local_vtable)
+                elif prompt.elem_type == "var":
+                    try:
+                        vname = prompt.dict["name"]
+                        pval = local_vtable[vname]
+                    except KeyError:
+                        super().error(intbase.ErrorType.NAME_ERROR,
+                                      "Variable '" + vname + "' is not defined")
+                elif prompt.elem_type in Interpreter.__datatypes:
+                    pval = prompt.dict["val"]
+                elif prompt.elem_type == "fcall":
+                    pval = self.eval_fcall(prompt, local_vtable)
+                else:
+                    super().error(intbase.ErrorType.NAME_ERROR, "smth is wrong")
+                if isinstance(pval, int):
+                    super().output(str(pval))
+                elif isinstance(pval, bool):
+                    if pval:
+                        super().output("true")
+                    else:
+                        super().output("false")
+                else:
+                    super().output(pval)
+        if itype == "int":
+            return int(super().get_input())
+        else:
+            return str(super().get_input())
+
+    def eval_return(self, r, local_vtable):
+        exp = r.dict["expression"]
+        if exp is None:
+            return None
+        if exp.elem_type in Interpreter.__binops:
+            out = self.eval_binop(exp, local_vtable)
+        elif exp.elem_type == "nil":
+            return None
+        else:
+            if exp.elem_type in Interpreter.__unops:
+                out = self.eval_unary(exp, local_vtable)
+            elif exp.elem_type == "var":
+                try:
+                    vname = exp.dict["name"]
+                    out = local_vtable[vname]
+                except KeyError:
+                    super().error(intbase.ErrorType.NAME_ERROR,
+                                  "Variable '" + vname + "' is not defined")
+            elif exp.elem_type in Interpreter.__datatypes:
+                out = exp.dict["val"]
+            elif exp.elem_type == "fcall":
+                out = self.eval_fcall(exp, local_vtable)
+            # else:
+            #     super().error(intbase.ErrorType.NAME_ERROR, "smth is wrong")
+        return out
+
+    def eval_if(self, chk, local_vtable):
+        arg = chk.dict["condition"]
+        if arg.elem_type in Interpreter.__binops:
+            cond = self.eval_binop(arg, local_vtable)
+        elif arg.elem_type == "nil":
+            cond = None
+        else:
+            if arg.elem_type in Interpreter.__unops:
+                cond = self.eval_unary(arg, local_vtable)
+            elif arg.elem_type == "var":
+                try:
+                    vname = arg.dict["name"]
+                    cond = local_vtable[vname]
+                except KeyError:
+                    super().error(intbase.ErrorType.NAME_ERROR,
+                                  "Variable '" + vname + "' is not defined")
+            elif arg.elem_type in Interpreter.__datatypes:
+                cond = arg.dict["val"]
+            elif arg.elem_type == "fcall":
+                cond = self.eval_fcall(arg, local_vtable)
+            else:
+                super().error(intbase.ErrorType.NAME_ERROR, "smth is wrong")
+            if isinstance(cond, int):
+                cond = True if cond != 0 else False
+            elif not isinstance(cond, bool):
+                super().error(intbase.ErrorType.TYPE_ERROR, "Incompatible type for if condition")
+
+        block_vtable = []                
+        if cond:
+            for s in chk.dict["statements"]:
+                if self.__nestedbreak["flag"]:
+                    for vname in block_vtable:
+                        if vname in list(local_vtable):
+                            del local_vtable[vname]
+                    return None
+                if s.elem_type == '=':
+                    if s.dict["name"] not in list(local_vtable):
+                        block_vtable.append(s.dict["name"])
+                    self.eval_assign(s, local_vtable)
+                elif s.elem_type == "fcall":
+                    self.eval_fcall(s, local_vtable)
+                elif s.elem_type == "if":
+                    self.eval_if(s, local_vtable)
+                    if self.__nestedbreak["flag"]:
+                        out = self.__nestedbreak["value"]
+                        self.__nestedbreak
+                elif s.elem_type == "while":
+                    self.eval_while(s, local_vtable)
+                elif s.elem_type == "return":
+                    out = self.eval_return(s, local_vtable)
+                    for vname in block_vtable:
+                        del local_vtable[vname]
+                    self.__nestedbreak["flag"] = True
+                    self.__nestedbreak["value"] = out
+                    return out
+            for vname in block_vtable:
+                del local_vtable[vname]
+            return None
+        else:
+            if chk.dict["else_statements"] is None:
+                return None
+            for s in chk.dict["else_statements"]:
+                if self.__nestedbreak["flag"]:
+                    for vname in block_vtable:
+                        if vname in list(local_vtable):
+                            del local_vtable[vname]
+                    return None
+                if s.elem_type == '=':
+                    if s.dict["name"] not in list(local_vtable):
+                        block_vtable.append(s.dict["name"])
+                    self.eval_assign(s, local_vtable)
+                elif s.elem_type == "fcall":
+                    self.eval_fcall(s, local_vtable)
+                elif s.elem_type == "if":
+                    self.eval_if(s, local_vtable)
+                elif s.elem_type == "while":
+                    self.eval_while(s, local_vtable)
+                elif s.elem_type == "return":
+                    out = self.eval_return(s, local_vtable)
+                    for vname in block_vtable:
+                        del local_vtable[vname]
+                    self.__nestedbreak["flag"] = True
+                    self.__nestedbreak["value"] = out
+                    return out
+            for vname in block_vtable:
+                del local_vtable[vname]
+            return None
+
+    def eval_while(self, chk, local_vtable):
+        arg = chk.dict["condition"]
+        if arg.elem_type in Interpreter.__binops:
+            cond = self.eval_binop(arg, local_vtable)
+        elif arg.elem_type == "nil":
+            cond = None
+        else:
+            if arg.elem_type in Interpreter.__unops:
+                cond = self.eval_unary(arg, local_vtable)
+            elif arg.elem_type == "var":
+                try:
+                    vname = arg.dict["name"]
+                    cond = local_vtable[vname]
+                except KeyError:
+                    super().error(intbase.ErrorType.NAME_ERROR,
+                                  "Variable '" + vname + "' is not defined")
+            elif arg.elem_type in Interpreter.__datatypes:
+                cond = arg.dict["val"]
+            elif arg.elem_type == "fcall":
+                cond = self.eval_fcall(arg, local_vtable)
+            else:
+                super().error(intbase.ErrorType.NAME_ERROR, "smth is wrong")
+            if isinstance(cond, int):
+                cond = True if cond != 0 else False
+            elif not isinstance(cond, bool):
+                super().error(intbase.ErrorType.TYPE_ERROR, "Incompatible type for if condition")
+
+        block_vtable = []
+        if cond:
+            for s in chk.dict["statements"]:
+                if self.__nestedbreak["flag"]:
+                    for vname in block_vtable:
+                        if vname in list(local_vtable):
+                            del local_vtable[vname]
+                    return None
+                if s.elem_type == '=':
+                    if s.dict["name"] not in list(local_vtable):
+                        block_vtable.append(s.dict["name"])
+                    self.eval_assign(s, local_vtable)
+                elif s.elem_type == "fcall":
+                    self.eval_fcall(s, local_vtable)
+                elif s.elem_type == "if":
+                    self.eval_if(s, local_vtable)
+                elif s.elem_type == "while":
+                    self.eval_while(s, local_vtable)
+                elif s.elem_type == "return":
+                    out = self.eval_return(s, local_vtable)
+                    for vname in block_vtable:
+                        del local_vtable[vname]
+                    self.__nestedbreak["flag"] = True
+                    self.__nestedbreak["value"] = out
+                    return out
+            for vname in block_vtable:
+                if vname in list(local_vtable):
+                    del local_vtable[vname]
+            self.eval_while(chk, local_vtable)
+        else:
+            return None
