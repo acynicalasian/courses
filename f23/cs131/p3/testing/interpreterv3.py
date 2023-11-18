@@ -73,7 +73,7 @@ class Interpreter(intbase.InterpreterBase):
         rh = None
         if rh_node.elem_type in Interpreter.__binops:
             rh = self.eval_binop(rh_node, local_vtable, local_ftable, rh_lambda)
-        elif rh_node.elem_type in Interpreter.__unops:
+        if rh_node.elem_type in Interpreter.__unops:
             rh = self.eval_unary(rh_node, local_vtable, local_ftable, rh_lambda)
         elif rh_node.elem_type == "var":
             vname = rh_node.dict["name"]
@@ -359,15 +359,13 @@ class Interpreter(intbase.InterpreterBase):
                   original_ftable, rh_lambda=None):
         shadowed_vtable = dict()
         block_vtable = []
-        ref_args = []
         for i in range(len(args)):
             vname = f.dict["args"][i].dict["name"]
-            # Try my best to handle pass-by-value vs reference here ig.
+            # Try my best to handle pass-by-value vs reference here ig
             if f.dict["args"][i].elem_type == "arg":
                 if isinstance(args[i], Ref):
                     shadowed_vtable[vname] = Ref(args[i].val)
             else:
-                ref_args.append(vname)
                 shadowed_vtable[vname] = args[i]
         for key in list(shadowed_vtable):
             local_vtable[key] = shadowed_vtable[key]
@@ -379,23 +377,7 @@ class Interpreter(intbase.InterpreterBase):
                 vname = s.dict["name"]
                 # dynamically in scope, not shadowed
                 if vname not in list(shadowed_vtable) and vname in list(original_vtable):
-                    self.eval_assign(s, original_vtable, local_ftable, rh_lambda)
-                elif vname in list(shadowed_vtable) and vname in ref_args:
-                    rh_node = s.dict["expression"]
-                    if rh_node.elem_type in Interpreter.__binops:
-                        local_vtable[vname].val = self.eval_binop(rh_node, local_vtable,
-                                                                  local_ftable, rh_lambda)
-                    elif rh_node.elem_type in Interpreter.__unops:
-                        local_vtable[vname].val = self.eval_unary(rh_node, local_vtable, local_ftable, rh_lambda)
-                    elif rh_node.elem_type == "var":
-                        rh_name = rh_node.dict["name"]
-                        if rh_lambda:
-                            if rh_name in rh_lambda.vcaptures:
-                                local_vtable[vname].val = rh_lambda.vcaptures[vname].val
-                                continue
-                            elif rh_name in rh_lambda.fcaptures:
-                                local_vtable[vname] = rh_lambda.fcaptures[vname]
-                                continue
+                    self.eval_assign(s, original_vtable, None)
                 self.eval_assign(s, local_vtable)
             elif s.elem_type == "fcall":
                 self.eval_fcall(s, local_vtable)
