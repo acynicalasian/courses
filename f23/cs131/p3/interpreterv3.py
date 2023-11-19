@@ -22,8 +22,7 @@ class Interpreter(intbase.InterpreterBase):
     __binops = ['+', '-', '*', '/', "==", "!=", '<', "<=", '>', ">=", "||", "&&"]
     __unops = ["neg", '!']
     __datatypes = ["int", "string", "bool"]
-    __elemtypes = (Interpreter.__binops + Interpreter.__unops + Interpreter.__datatypes
-                     + ["nil", "fcall"])
+    __elemtypes = __binops + __unops + __datatypes + ["nil", "fcall"]
     
 
     def __init__(self, console_output=True, inp=None, trace_output=False):
@@ -44,10 +43,9 @@ class Interpreter(intbase.InterpreterBase):
             if fname == "main":
                 found_main = True
                 main = f
-            else:
-                if fname not in self.__ftable:
-                    self.__vtable[fname] = []
-                self.__vtable[fname].append(Function(f))
+            if fname not in self.__vtable:
+                self.__vtable[fname] = []
+            self.__vtable[fname].append(Function(f))
         if not found_main:
             super().error(intbase.ErrorType.NAME_ERROR, "No main() function was found")
         for s in main.dict["statements"]:
@@ -69,11 +67,21 @@ class Interpreter(intbase.InterpreterBase):
         return 0
 
     def eval_assign(self, s, local_vtable, closure_vtable=None, ref_vtable=None):
+        #breakpoint()
         lh = s.dict["name"]
         rh_node = s.dict["expression"]
         rh = None
         if rh_node.elem_type in Interpreter.__elemtypes:
-            rh = self.eval_elem(rh_node, local_vtable, closure_vtable)
+            # old line
+            #rh = Ref(self.eval_elem(rh_node, local_vtable, closure_vtable))
+            e = self.eval_elem(rh_node, local_vtable, closure_vtable, ref_vtable)
+            if isinstance(e, Function):
+                if e.closures is None:
+                    rh = e
+                else:
+                    rh = copy.deepcopy(e)
+            else:
+                rh = Ref(e)
         elif rh_node.elem_type == "var":
             vname = rh_node.dict["name"]
             rh = self.get_var(vname, local_vtable, closure_vtable)
@@ -82,8 +90,11 @@ class Interpreter(intbase.InterpreterBase):
         else:
             super().error(intbase.ErrorType.NAME_ERROR, "you missed a case")
         target_tables = [local_vtable]
-        if lh in closure_vtable and local_vtable[self.__fncontext].closures is closure_vtable:
-            target_tables.append(closure_vtable)
+        if closure_vtable is not None:
+            if local_vtable is closure_vtable:
+                pass
+            elif lh in closure_vtable and local_vtable[self.__fncontext].closures is closure_vtable:
+                target_tables.append(closure_vtable)
         for t in target_tables:
             if isinstance(rh, Function):
                 t[lh] = rh
@@ -91,29 +102,31 @@ class Interpreter(intbase.InterpreterBase):
                 if ref_vtable is not None:
                     if lh in ref_vtable:
                         t[lh].val = rh.val
-            else:
-                t[lh] = Ref(rh.val)
+                else:
+                    t[lh] = Ref(rh.val)
         return None
 
     def get_var(self, vname, local_vtable, closure_vtable=None):
         if closure_vtable is not None:
             if vname in closure_vtable:
                 out = closure_vtable[vname]
-            elif vname in local_vtable:
+            else:
                 out = local_vtable[vname]
-            else:
+        elif vname in local_vtable:
+            out = local_vtable[vname]
+        else:
+            super().error(intbase.ErrorType.NAME_ERROR,
+                          "Variable/function " + vname + " not found")
+        if isinstance(out, list):
+            # Overload error takes precedence, looks like
+            # Guaranteed to be a function if vtable entry is a list
+            if len(out) > 1:
                 super().error(intbase.ErrorType.NAME_ERROR,
-                              "Variable/function " + vname + " not found")
-            if isinstance(out, list):
-                # Overload error takes precedence, looks like
-                # Guaranteed to be a function if vtable entry is a list
-                if len(out) > 1:
-                    super().error(intbase.ErrorType.NAME_ERROR,
-                                  "Function " + vname + " has multiple overloaded versions")
-                else:
-                    return out[0]
+                              "Function " + vname + " has multiple overloaded versions")
             else:
-                return out
+                return out[0]
+        else:
+            return out
 
     def eval_elem(self, e, local_vtable, closure_vtable=None, ref_vtable=None):
         if e.elem_type in Interpreter.__binops:
@@ -134,10 +147,11 @@ class Interpreter(intbase.InterpreterBase):
         for i in [0, 1]:
             opn = "op" + str(i+1)
             if exp.dict[opn].elem_type in Interpreter.__elemtypes:
-                op[i] = self.eval_elem(e, local_vtable, closure_vtable, ref_vtable)
+                op[i] = self.eval_elem(exp.dict[opn], local_vtable, closure_vtable, ref_vtable)
             elif exp.dict[opn].elem_type == "var":
                 vname = exp.dict[opn].dict["name"]
-                op[i] = self.get_var(vname, local_vtable, closure_vtable)
+                v = self.get_var(vname, local_vtable, closure_vtable)
+                op[i] = v if isinstance(v, Function) else v.val
             elif exp.dict[opn].elem_type == "lambda":
                 op[i] = Function(exp.dict[opn], local_vtable, ref_vtable)
             else:
@@ -148,8 +162,8 @@ class Interpreter(intbase.InterpreterBase):
             elif exp.elem_type == "!=":
                 return op[0] is not op[1] if type(op[0]) == type(op[1]) else True
             else:
-                return Interpreter.binop_error(exp.elem_type, op[0], op[1])
-        op = [ "nil" if elem.val is None else elem.val for elem in op ]
+                return self.binop_error(exp.elem_type, op[0], op[1])
+        op = [ "nil" if elem is None else elem for elem in op ]
         
         if exp.elem_type == '+':
             # Python automatically casts bools to ints :)
@@ -157,7 +171,7 @@ class Interpreter(intbase.InterpreterBase):
                 (isinstance(op[0], str) and isinstance(op[1], str))):
                 return op[0] + op[1]
             else:
-                return Interpreter.binop_error('+', op[0], op[1])
+                return self.binop_error('+', op[0], op[1])
         elif exp.elem_type in ['-', '*', '/']:
             if isinstance(op[0], int) and isinstance(op[1], int):
                 if exp.elem_type == '-':
@@ -167,7 +181,7 @@ class Interpreter(intbase.InterpreterBase):
                 else:
                     return op[0] // op[1]
             else:
-                return Interpreter.binop_error(exp.elem_type, op[0], op[1])
+                return self.binop_error(exp.elem_type, op[0], op[1])
         elif exp.elem_type == "==":
             if isinstance(op[0], int) and isinstance(op[1], int):
                 # catch behavior of == returning true for (true == non-zero)
@@ -187,9 +201,9 @@ class Interpreter(intbase.InterpreterBase):
                 else:
                     return op[0] != 0 and op[1] != 0
         else:
-            return Interpreter.binop_error(exp.elem_type, op[0], op[1])
+            return self.binop_error(exp.elem_type, op[0], op[1])
 
-    def binop_error(op, a, b):
+    def binop_error(self, op, a, b):
         if type(a) == type(b):            
             t = "TYPE.CLOSURE" if isinstance(a, Function) else "TYPE.STRING"
             super().error(intbase.ErrorType.TYPE_ERROR,
@@ -200,10 +214,10 @@ class Interpreter(intbase.InterpreterBase):
 
     def eval_unary(self, exp, local_vtable, closure_vtable=None, ref_vtable=None):
         if exp.dict["op1"].elem_type in Interpreter.__elemtypes:
-            op = self.eval_elem(e, local_vtable, closure_vtable)
+            op = self.eval_elem(exp.dict["op1"], local_vtable, closure_vtable)
         elif exp.dict["op1"].elem_type == "var":
             vname = exp.dict["op1"].dict["name"]
-            op = self.get_var(vname, local_vtable, closure_vtable)
+            op = self.get_var(vname, local_vtable, closure_vtable).val
         elif exp.dict["op1"].elem_type == "lambda":
             op = None
         else:
@@ -235,24 +249,31 @@ class Interpreter(intbase.InterpreterBase):
             sig = local_vtable[fname]
         except KeyError:
             super().error(intbase.ErrorType.NAME_ERROR, "Function " + fname + " not found")
-        f = None
-        for g in sig:
-            if len(g.args) == len(call.dict["args"]):
-                f = g
-                break
-        if f is None:
-            # Implies it's a lambda
-            if sig[0].closures is not None:
-                super().error(intbase.ErrorType.TYPE_ERROR, "Invalid # of args to lambda")
-            else:
-                super().error(intbase.ErrorType.NAME_ERROR,
-                              "No " + fname + " function that takes " +
-                              str(len(call.dict["args"])) + " parameter(s)")
+        if isinstance(sig, Function):
+            f = sig
+        else:
+            f = None
+            if not isinstance(sig, list):
+                # Implicitly not a function (we caught lambdas in the if-statement above)
+                super().error(intbase.ErrorType.TYPE_ERROR,
+                              "Trying to call function with non-closure")
+            for g in sig:
+                if len(g.args) == len(call.dict["args"]):
+                    f = g
+                    break
+            if f is None:
+                # Implies it's a lambda
+                if sig[0].closures is not None:
+                    super().error(intbase.ErrorType.TYPE_ERROR, "Invalid # of args to lambda")
+                else:
+                    super().error(intbase.ErrorType.NAME_ERROR,
+                                  "No " + fname + " function that takes " +
+                                  str(len(call.dict["args"])) + " parameter(s)")
                 
         args = []
         for a in call.dict["args"]:
             if a.elem_type in Interpreter.__elemtypes:
-                args.append(self.eval_binop(a, local_vtable, closure_vtable))
+                args.append(Ref(self.eval_elem(a, local_vtable, closure_vtable, ref_vtable)))
             elif a.elem_type == "var":
                 vname = a.dict["name"]
                 args.append(self.get_var(vname, local_vtable, closure_vtable))
@@ -292,7 +313,15 @@ class Interpreter(intbase.InterpreterBase):
                 vname = s.dict["name"]
                 # dynamically in scope, not shadowed
                 if vname not in shadowed_vtable and vname in original_vtable:
-                    self.eval_assign(s, original_vtable, closure_vtable, ref_vtable)
+                    if closure_vtable is not None:
+                        if vname in closure_vtable:
+                            self.eval_assign(s, closure_vtable, closure_vtable, ref_vtable)
+                    else:
+                        self.eval_assign(s, original_vtable, closure_vtable, ref_vtable)
+                # testing this elif
+                elif closure_vtable is not None:
+                    if vname in closure_vtable:
+                        self.eval_assign(s, closure_vtable, closure_vtable, ref_vtable)
                 else:
                     self.eval_assign(s, local_vtable, closure_vtable, ref_vtable)
             elif s.elem_type == "fcall":
@@ -306,7 +335,10 @@ class Interpreter(intbase.InterpreterBase):
                     out = self.__nestedbreak["val"]
                     self.__nestedbreak["flag"] = False
                     self.__nestedbreak["val"] = None
-                    return out
+                    if isinstance(out, Function):
+                        return out
+                    else:
+                        return Ref(out)
             elif s.elem_type == "return":
                 return self.eval_return(s, local_vtable, closure_vtable, ref_vtable)
         return None
@@ -320,20 +352,20 @@ class Interpreter(intbase.InterpreterBase):
             if arg.elem_type in Interpreter.__elemtypes:
                 bop = self.eval_elem(arg, local_vtable, closure_vtable)
             elif arg.elem_type == "var":
-                bop = self.get_var(arg.dict["name"], local_vtable, closure_vtable)
+                bop = self.get_var(arg.dict["name"], local_vtable, closure_vtable).val
                 assert not isinstance(bop, Function), "Error, can't pass function as a print param"
             elif arg.elem_type == "lambda":
                 assert False, "Error, can't pass function as a print param"
             else:
                 super().error(intbase.ErrorType.NAME_ERROR, "you missed a case")
-        if bop and isinstance(bop, bool):
-            acc += "true"
-        elif not bop and isinstance(bop, bool):
-            acc += "false"
-        elif bop is None:
-            acc += "nil"
-        else:
-            acc += str(bop)
+            if bop and isinstance(bop, bool):
+                acc += "true"
+            elif not bop and isinstance(bop, bool):
+                acc += "false"
+            elif bop is None:
+                acc += "nil"
+            else:
+                acc += str(bop)
         super().output(acc)
         return None
 
@@ -347,11 +379,11 @@ class Interpreter(intbase.InterpreterBase):
             if prompt.elem_type in Interpreter.__elemtypes:
                 pval = self.eval_elem(prompt, local_vtable, closure_vtable)
             elif prompt.elem_type == "var":
-                pval = self.get_var(prompt.dict["name"], local_vtable, closure_vtable)
+                pval = self.get_var(prompt.dict["name"], local_vtable, closure_vtable).val
                 assert not isinstance(pval, Function), "Error, can't pass function as a print param"
             elif prompt.elem_type == "lambda":
                 assert False, "Error, can't pass function as a print param"
-            else:p
+            else:
                 super().error(intbase.ErrorType.NAME_ERROR, "you missed a case")
             if isinstance(pval, bool):
                 if pval:
@@ -398,7 +430,7 @@ class Interpreter(intbase.InterpreterBase):
         if arg.elem_type in Interpreter.__elemtypes:
             cond = self.eval_elem(arg, local_vtable, closure_vtable, ref_vtable)
         elif arg.elem_type == "var":
-            cond = self.get_var(arg.dict["name"], local_vtable, closure_vtable, ref_vtable)
+            cond = self.get_var(arg.dict["name"], local_vtable, closure_vtable)
         elif arg.elem_type == "lambda":
             cond = None
         else:
