@@ -45,11 +45,11 @@ class Interpreter(intbase.InterpreterBase):
             elif s.elem_type == "fcall":
                 self.eval_fcall(s, self.__vtable)
             elif s.elem_type == "if":
-                self.eval_if(s, self.__vtable)
+                self.eval_if(s, self.__vtable, self.__vtable, [])
                 if self.__nestedbreak["flag"]:
                     return self.__nestedbreak["value"]
             elif s.elem_type == "while":
-                self.eval_while(s, self.__vtable)
+                self.eval_while(s, self.__vtable, self.__vtable, [])
                 if self.__nestedbreak["flag"]:
                     return self.__nestedbreak["value"]
             elif s.elem_type == "return":
@@ -108,16 +108,13 @@ class Interpreter(intbase.InterpreterBase):
             else:
                 super().error(intbase.ErrorType.NAME_ERROR, "you messed up")
         if exp.elem_type == '+':
-            if ((isinstance(op[0], int) or isinstance(op[0], bool)) and
-                (isinstance(op[1], int) or isinstance(op[1], bool))):
-                return op[0] + op[1]
-            elif isinstance(op[0], str) and isinstance(op[1], str):
+            if (type(op[0]) == type(op[1]) and (isinstance(op[0], str) or isinstance(op[0], int))
+                and not isinstance(op[0], bool)):
                 return op[0] + op[1]
             else:
                 self.binop_error(exp.elem_type, op[0], op[1])
         elif exp.elem_type in ['-', '*', '/']:
-            if ((isinstance(op[0], int) or isinstance(op[0], bool)) and
-                (isinstance(op[1], int) or isinstance(op[1], bool))):
+            if type(op[0]) == type(op[1]) and isinstance(op[0], int) and not isinstance(op[0],bool):
                 if exp.elem_type == '-':
                     return op[0] - op[1]
                 elif exp.elem_type == '*':
@@ -129,41 +126,26 @@ class Interpreter(intbase.InterpreterBase):
         elif exp.elem_type == "==":
             if type(op[0]) == type(op[1]):
                 return op[0] == op[1]
-            elif ((isinstance(op[0], bool) or isinstance(op[0], int)) and
-                  (isinstance(op[1], bool) or isinstance(op[1], int))):
-                return bool(op[0]) == bool(op[1])
             else:
                 return False
         elif exp.elem_type == "!=":
             if type(op[0]) == type(op[1]):
                 return op[0] != op[1]
-            elif ((isinstance(op[0], bool) or isinstance(op[0], int)) and
-                  (isinstance(op[1], bool) or isinstance(op[1], int))):
-                return bool(op[0]) != bool(op[1])
             else:
                 return True
         elif exp.elem_type in ['<', "<="]:
-            if ((isinstance(op[0], bool) or isinstance(op[0], int)) and
-                (isinstance(op[1], bool) or isinstance(op[1], int))):
-                return int(op[0]) < int(op[1]) if exp.elem_type == '<' else int(op[0]) <= int(op[1])
+            if type(op[0]) == type(op[1]) and isinstance(op[0],int) and not isinstance(op[0],bool):
+                return op[0] < op[1] if exp.elem_type == '<' else op[0] <= op[1]
             else:
                 self.binop_error(exp.elem_type, op[0], op[1])
         elif exp.elem_type in ['>', ">="]:
-            if ((isinstance(op[0], bool) or isinstance(op[0], int)) and
-                (isinstance(op[1], bool) or isinstance(op[1], int))):
-                return int(op[0]) > int(op[1]) if exp.elem_type == '>' else int(op[0]) >= int(op[1])
+            if type(op[0]) == type(op[1]) and isinstance(op[0],int) and not isinstance(op[0],bool):
+                return op[0] > op[1] if exp.elem_type == '>' else op[0] >= op[1]
             else:
                 self.binop_error(exp.elem_type, op[0], op[1])
         elif exp.elem_type in ["||", "&&"]:
             if isinstance(op[0], bool) and isinstance(op[1], bool):
                 return op[0] or op[1] if exp.elem_type == "||" else op[0] and op[1]
-            elif isinstance(op[0], int) and isinstance(op[1], bool):
-                return (op[0] != 0) or op[1] if exp.elem_type == "||" else (op[0] != 0) and op[1]
-            elif isinstance(op[0], bool) and isinstance(op[1], int):
-                return op[0] or (op[1] != 0) if exp.elem_type == "||" else op[0] and (op[1] != 0)
-            elif isinstance(op[0], int) and isinstance(op[1], int):
-                return ((op[0] != 0) or (op[1] != 0) if exp.elem_type == "||" else
-                        (op[1] != 0) and (op[1] != 0))
             else:
                 self.binop_error(exp.elem_type, op[0], op[1])
         else:
@@ -200,15 +182,13 @@ class Interpreter(intbase.InterpreterBase):
         else:
             super().error(intbase.ErrorType.NAME_ERROR, "you messed up")
         if exp.elem_type == "neg":
-            if isinstance(op, int):
+            if isinstance(op, int) and not isinstance(op, bool):
                 return -(op)
             else:
                 super().error(intbase.ErrorType.TYPE_ERROR, "Incompatible type for neg operation")
         elif exp.elem_type == '!':
             if isinstance(op, bool):
                 return not op
-            elif isinstance(op, int):
-                return not (op != 0)
             else:
                 super().error(intbase.ErrorType.TYPE_ERROR, "Incompatible type for ! operation")
         else:
@@ -227,7 +207,7 @@ class Interpreter(intbase.InterpreterBase):
         try:
             sig = self.__ftable[fname]
         except KeyError:
-            super().error(intbase.ErrorType.NAME_ERROR, "Function " + fname + "not found")
+            super().error(intbase.ErrorType.NAME_ERROR, "Function " + fname + " not found")
         f = None
         for g in sig:
             if len(g.dict["args"]) == len(call.dict["args"]):
@@ -270,6 +250,8 @@ class Interpreter(intbase.InterpreterBase):
             shadowed_vtable[vname] = args[i]
         for key in list(shadowed_vtable):
             local_vtable[key] = shadowed_vtable[key]
+        # I'll be honest, this code is so spaghetti that I'm not sure if this loop actually does
+        # anything
         for key in list(original_vtable):    # realign the deep copy, except shadowed vars
             if key not in list(shadowed_vtable):
                 local_vtable[key] = original_vtable[key]
@@ -278,26 +260,30 @@ class Interpreter(intbase.InterpreterBase):
                 vname = s.dict["name"]
                 # dynamically in scope, not shadowed
                 if vname not in list(shadowed_vtable) and vname in list(original_vtable):
-                    self.eval_assign(s, original_vtable)
-                self.eval_assign(s, local_vtable)
+                    self.eval_assign(s, local_vtable)
+                    original_vtable[vname] = local_vtable[vname]
+                # function scoped (changes "disappear" because it's on a deep copy)
+                # or it's shadowed
+                else:
+                    self.eval_assign(s, local_vtable)
             elif s.elem_type == "fcall":
                 self.eval_fcall(s, local_vtable)
             elif s.elem_type == "if":
-                self.eval_if(s, local_vtable)
+                self.eval_if(s, local_vtable, original_vtable, list(shadowed_vtable))
                 if self.__nestedbreak["flag"]:
                     out = self.__nestedbreak["value"]
                     self.__nestedbreak["flag"] = False
                     self.__nestedbreak["value"] = None
                     return out
             elif s.elem_type == "while":
-                self.eval_while(s, local_vtable)
+                self.eval_while(s, local_vtable, original_vtable, list(shadowed_vtable))
                 if self.__nestedbreak["flag"]:
                     out = self.__nestedbreak["value"]
                     self.__nestedbreak["flag"] = False
                     self.__nestedbreak["value"] = None
                     return out
             elif s.elem_type == "return":
-                return self.eval_return(s, local_vtable)
+                return self.eval_return(s, local_vtable)            
         return None
 
     def eval_print(self, f, local_vtable):
@@ -332,13 +318,13 @@ class Interpreter(intbase.InterpreterBase):
                     aval = self.eval_fcall(arg, local_vtable)
                 else:
                     super().error(intbase.ErrorType.NAME_ERROR, "smth is wrong")
-                if isinstance(aval, int):
-                    acc += str(aval)
-                elif isinstance(aval, bool):
+                if isinstance(aval, bool):
                     if aval:
                         acc += "true"
                     else:
                         acc += "false"
+                elif isinstance(aval, int):
+                    acc += str(aval)
                 elif aval is None:
                     acc += "nil"
                 else:
@@ -372,13 +358,13 @@ class Interpreter(intbase.InterpreterBase):
                     pval = self.eval_fcall(prompt, local_vtable)
                 else:
                     super().error(intbase.ErrorType.NAME_ERROR, "smth is wrong")
-                if isinstance(pval, int):
-                    super().output(str(pval))
-                elif isinstance(pval, bool):
+                if isinstance(pval, bool):
                     if pval:
                         super().output("true")
                     else:
                         super().output("false")
+                elif isinstance(pval, int):
+                    super().output(str(pval))
                 else:
                     super().output(pval)
         if itype == "int":
@@ -412,7 +398,7 @@ class Interpreter(intbase.InterpreterBase):
             #     super().error(intbase.ErrorType.NAME_ERROR, "smth is wrong")
         return out
 
-    def eval_if(self, chk, local_vtable):
+    def eval_if(self, chk, local_vtable, original_vtable, shadowed_vtable):
         arg = chk.dict["condition"]
         if arg.elem_type in Interpreter.__binops:
             cond = self.eval_binop(arg, local_vtable)
@@ -434,10 +420,8 @@ class Interpreter(intbase.InterpreterBase):
                 cond = self.eval_fcall(arg, local_vtable)
             else:
                 super().error(intbase.ErrorType.NAME_ERROR, "smth is wrong")
-            if isinstance(cond, int):
-                cond = True if cond != 0 else False
-            elif not isinstance(cond, bool):
-                super().error(intbase.ErrorType.TYPE_ERROR, "Incompatible type for if condition")
+        if not isinstance(cond, bool):
+            super().error(intbase.ErrorType.TYPE_ERROR, "Incompatible type for if condition")
 
         block_vtable = []                
         if cond:
@@ -448,18 +432,26 @@ class Interpreter(intbase.InterpreterBase):
                             del local_vtable[vname]
                     return None
                 if s.elem_type == '=':
-                    if s.dict["name"] not in list(local_vtable):
+                    # scoped within if-block
+                    vname = s.dict["name"]
+                    if vname not in list(local_vtable):
                         block_vtable.append(s.dict["name"])
-                    self.eval_assign(s, local_vtable)
+                        self.eval_assign(s, local_vtable)
+                    # dynamically in scope, not shadowed
+                    elif vname not in shadowed_vtable and vname in list(original_vtable):
+                        self.eval_assign(s, local_vtable)
+                        original_vtable[vname] = local_vtable[vname]
+                    else:                        
+                        self.eval_assign(s, local_vtable)
                 elif s.elem_type == "fcall":
                     self.eval_fcall(s, local_vtable)
                 elif s.elem_type == "if":
-                    self.eval_if(s, local_vtable)
+                    self.eval_if(s, local_vtable, original_vtable, shadowed_vtable)
                     if self.__nestedbreak["flag"]:
                         out = self.__nestedbreak["value"]
                         self.__nestedbreak
                 elif s.elem_type == "while":
-                    self.eval_while(s, local_vtable)
+                    self.eval_while(s, local_vtable, original_vtable, shadowed_vtable)
                 elif s.elem_type == "return":
                     out = self.eval_return(s, local_vtable)
                     for vname in block_vtable:
@@ -480,15 +472,23 @@ class Interpreter(intbase.InterpreterBase):
                             del local_vtable[vname]
                     return None
                 if s.elem_type == '=':
-                    if s.dict["name"] not in list(local_vtable):
+                    # scoped within else-block
+                    vname = s.dict["name"]
+                    if vname not in list(local_vtable):
                         block_vtable.append(s.dict["name"])
-                    self.eval_assign(s, local_vtable)
+                        self.eval_assign(s, local_vtable)
+                    # dynamically in scope, not shadowed
+                    elif vname not in shadowed_vtable and vname in list(original_vtable):
+                        self.eval_assign(s, local_vtable)
+                        original_vtable[vname] = local_vtable[vname]
+                    else:
+                        self.eval_assign(s, local_vtable)
                 elif s.elem_type == "fcall":
                     self.eval_fcall(s, local_vtable)
                 elif s.elem_type == "if":
-                    self.eval_if(s, local_vtable)
+                    self.eval_if(s, local_vtable, original_vtable, shadowed_vtable)
                 elif s.elem_type == "while":
-                    self.eval_while(s, local_vtable)
+                    self.eval_while(s, local_vtable, original_vtable, shadowed_vtable)
                 elif s.elem_type == "return":
                     out = self.eval_return(s, local_vtable)
                     for vname in block_vtable:
@@ -500,7 +500,7 @@ class Interpreter(intbase.InterpreterBase):
                 del local_vtable[vname]
             return None
 
-    def eval_while(self, chk, local_vtable):
+    def eval_while(self, chk, local_vtable, original_vtable, shadowed_vtable):
         arg = chk.dict["condition"]
         if arg.elem_type in Interpreter.__binops:
             cond = self.eval_binop(arg, local_vtable)
@@ -522,10 +522,8 @@ class Interpreter(intbase.InterpreterBase):
                 cond = self.eval_fcall(arg, local_vtable)
             else:
                 super().error(intbase.ErrorType.NAME_ERROR, "smth is wrong")
-            if isinstance(cond, int):
-                cond = True if cond != 0 else False
-            elif not isinstance(cond, bool):
-                super().error(intbase.ErrorType.TYPE_ERROR, "Incompatible type for if condition")
+        if not isinstance(cond, bool):
+            super().error(intbase.ErrorType.TYPE_ERROR, "Incompatible type for while condition")
 
         block_vtable = []
         if cond:
@@ -536,15 +534,25 @@ class Interpreter(intbase.InterpreterBase):
                             del local_vtable[vname]
                     return None
                 if s.elem_type == '=':
-                    if s.dict["name"] not in list(local_vtable):
+                    # scoped within while-block
+                    vname = s.dict["name"]
+                    if vname not in list(local_vtable):
                         block_vtable.append(s.dict["name"])
-                    self.eval_assign(s, local_vtable)
+                        self.eval_assign(s, local_vtable)
+                    # dynamically in scope, not shadowed
+                    elif vname not in shadowed_vtable and vname in list(original_vtable):
+                        self.eval_assign(s, local_vtable)
+                        original_vtable[vname] = local_vtable[vname]
+                    else:
+                        self.eval_assign(s, local_vtable)
                 elif s.elem_type == "fcall":
                     self.eval_fcall(s, local_vtable)
                 elif s.elem_type == "if":
-                    self.eval_if(s, local_vtable)
+                    self.eval_if(s, local_vtable, original_vtable, shadowed_vtable)
+                    if self.__nestedbreak["flag"]:
+                        out = self.__nestedbreak["value"]
                 elif s.elem_type == "while":
-                    self.eval_while(s, local_vtable)
+                    self.eval_while(s, local_vtable, original_vtable, shadowed_vtable)
                 elif s.elem_type == "return":
                     out = self.eval_return(s, local_vtable)
                     for vname in block_vtable:
@@ -555,6 +563,6 @@ class Interpreter(intbase.InterpreterBase):
             for vname in block_vtable:
                 if vname in list(local_vtable):
                     del local_vtable[vname]
-            self.eval_while(chk, local_vtable)
+            self.eval_while(chk, local_vtable, original_vtable, shadowed_vtable)
         else:
             return None
