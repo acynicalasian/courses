@@ -1,19 +1,15 @@
 from brewparse import parse_program
-from functools import partial
 import intbase
 import copy
 
 class Ref:
-    def __init__(self, v):
-        self.val = v
-    def deref(self):
-        ptr = self
-        while isinstance(ptr.val, Ref):
-            ptr = ptr.val
-        return ptr.val
-
-def isBuiltIn(f):
-    return callable(f)
+    def __init__(self, vname, local_vtable):
+        self.vname = vname
+        self.__vtable = local_vtable
+    def getval(self):
+        return self.__vtable[self.vname]
+    def setval(self, v):
+        self.__vtable[self.vname] = v
 
 class Function:
     __binops = ['+', '-', '*', '/', "==", "!=", '<', "<=", '>', ">=", "||", "&&"]
@@ -152,7 +148,6 @@ class Interpreter(intbase.InterpreterBase):
     def __init__(self, console_output=True, inp=None, trace_output=False):
         super().__init__(console_output, inp)
         self.__vtable = dict()    # vtable for main()
-        self.__ftable = dict()
         self.__nestedbreak = { "flag" : False, "val" : None }    # returning from inside if/whiles
 
     def run(self, program):
@@ -169,30 +164,24 @@ class Interpreter(intbase.InterpreterBase):
                 main = f
             if fname not in self.__vtable:
                 self.__vtable[fname] = []
-                self.__ftable[fname] = []
             self.__vtable[fname].append(Function(f))
-            self.__ftable[fname].append(Function(f))
         if not found_main:
             super().error(intbase.ErrorType.NAME_ERROR, "No main() function was found")
-        # Store function pointers to inputs(), inputi(), and print()
-        self.__vtable["inputs"] = partial(self.eval_input, "str")
-        self.__vtable["inputi"] = partial(self.eval_input, "int")
-        self.__vtable["print"] = self.eval_print
         for s in main.dict["statements"]:
             if s.elem_type == '=':
-                self.eval_assign(s, self.__vtable, self.__vtable["main"])
+                self.eval_assign(s, self.__vtable, self.__vtable["main"][0])
             elif s.elem_type == "fcall":
-                self.eval_fcall(s, self.__vtable, self.__vtable["main"])
+                self.eval_fcall(s, self.__vtable, self.__vtable["main"][0])
             elif s.elem_type == "if":
-                self.eval_if(s, self.__vtable, self.__vtable["main"])
+                self.eval_if(s, self.__vtable, self.__vtable["main"][0])
                 if self.__nestedbreak["flag"]:
                     return self.__nestedbreak["val"]
             elif s.elem_type == "while":
-                self.eval_while(s, self.__vtable, self.__vtable["main"])
+                self.eval_while(s, self.__vtable, self.__vtable["main"][0])
                 if self.__nestedbreak["flag"]:
                     return self.__nestedbreak["val"]
             elif s.elem_type == "return":
-                return self.eval_return(s, self.__vtable, self.__vtable["main"])
+                return self.eval_return(s, self.__vtable, self.__vtable["main"][0])
         return 0
             
     def eval_assign(self, s, local_vtable, current_fn):
@@ -204,10 +193,9 @@ class Interpreter(intbase.InterpreterBase):
         # literals, operations, and function calls all return values (not references)
         # ofc, except returning a function (but that's a deepcopy so w/e)
         if rh_node.elem_type in Interpreter.__elemtypes:
-            rh = Ref(self.eval_val(rh_node, local_vtable, current_fn))
+            rh = self.eval_val(rh_node, local_vtable, current_fn)
         elif rh_node.elem_type == "fcall":
             rh = self.eval_fcall(rh_node, local_vtable, current_fn)
-        # Return a reference first, and we'll reassign as needed
         elif rh_node.elem_type == "var":
             rh = self.get_ref(rh_node, local_vtable, current_fn)
         elif rh_node.elem_type == "lambda":
@@ -215,67 +203,30 @@ class Interpreter(intbase.InterpreterBase):
         else:
             assert False, "you missed a case"
 
-        # Write to refargs
-        if lh in local_vtable:            
-            if isinstance(local_vtable[lh], Ref):
-                # We have a reference to a parameter: recursively dereference the pointers
-                if isinstance(local_vtable[lh].val, Ref):
-                    ptr = local_vtable[lh].val
-                    while isinstance(ptr.val, Ref):
-                        ptr = ptr.val
-                # We don't have a pointer at local_vtable[lh]... we mutate Ref@local_vtable[rh]
-                else:
-                    ptr = local_vtable[lh]
-                # Even if 
-                if isinstance(rh, Ref):
-                    if not isinstance(rh.deref(), Function):
-                        ptr.val = rh.deref()
-                    else:
-                        ptr = rh
-                else:
-                    ptr.val = rh
-            # We previously pointed to a function
+        # Are we in a closure? Assign to the closure as well
+        target_vtables = [local_vtable]
+        if len(current_fn.closures) > 0 and lh in current_fn.closures:
+            target_vtables.append(current_fn.closures)
+        for t in target_vtables:
+            # If we have a refarg, use mutators as needed
+            if lh in t and isinstance(t[lh], Ref):
+                super().error(intbase.ErrorType.NAME_ERROR, "workin!")
+                assert False
             else:
-                if isinstance(rh, Ref):
-                    local_vtable[lh] = Ref(rh.deref())
-                elif isinstance(rh, Function) or isBuiltIn(rh):
-                    local_vtable[lh] = rh
-                else:
-                    local_vtable[lh] = Ref(rh)
-        # new value in local_vtable
-        else:
-            if isinstance(rh, Ref):
-                local_vtable[lh] = Ref(rh.deref())
-            elif isinstance(rh, Function) or isBuiltIn(rh):
-                local_vtable[lh] = rh
-            else:
-                local_vtable[lh] = Ref(rh)
-        return
-        # # Are we in a closure? Assign to the closure as well
-        # target_vtables = [local_vtable]
-        # if current_fn is not self.__vtable["main"] and lh in current_fn.closures:
-        #     target_vtables.append(current_fn.closures)            
-        # for t in target_vtables:
-        #     # Does the left-hand refer to a Ref() locally? If so, assign accordingly
-        #     if lh in t:
-        #         if isinstance(t[lh], Ref):
-        #             assert False()
-
-
-
+                t[lh] = rh
             
-        #     # If we have a refarg, use mutators as needed
-        #     if current_fn is not self.__vtable["main"] and lh in current_fn.refargs:
-        #         if isinstance(rh, Function):
-        #             # I don't think we need to worry about lh if rh is a fn
-        #             # eval_fcall should return a deep copy of functions anyway
-        #             t[lh] = rh
-        #         else:
-        #             t[lh].val = rh.val
-        #     # Not a refarg, we can set directly to rh
-        #     else:
-        #         t[lh] = rh
-        # return
+            # if current_fn is not self.__vtable["main"] and lh in current_fn.refargs:
+                
+            #     if isinstance(rh, Function):
+            #         # I don't think we need to worry about lh if rh is a fn
+            #         # eval_fcall should return a deep copy of functions anyway
+            #         t[lh] = rh
+            #     else:
+            #         t[lh].setval(rh)
+            # # Not a refarg, we can set directly to rh
+            # else:
+            #     t[lh] = rh
+        return
 
     def get_ref(self, r, local_vtable, current_fn):
         vname = r.dict["name"]
@@ -321,22 +272,16 @@ class Interpreter(intbase.InterpreterBase):
                 op[i] = self.eval_fcall(exp.dict[opn], local_vtable, current_fn)
             elif exp.dict[opn].elem_type == "var":
                 op[i] = self.get_ref(exp.dict[opn], local_vtable, current_fn)
-                # If the var doesn't refer to a function, we need to dereference
-                if not isinstance(op[i], Function) and not isBuiltIn(op[i]):
-                    op[i] = op[i].deref()
+                if isinstance(op[i], Ref):
+                    op[i] = op[i].getval()
             elif exp.dict[opn].elem_type == "lambda":
                 op[i] = Function(exp.dict[opn], True, local_vtable)
             else:
                 assert False, "you missed a case"
 
         # Handle function equality first
-        if (len(op) == 2 and ((isinstance(op[0], Function) or isinstance(op[1], Function)) or
-                              (isBuiltIn(op[0]) or isBuiltIn(op[1])))):
+        if len(op) == 2 and (isinstance(op[0], Function) or isinstance(op[1], Function)):
             if exp.elem_type == "==":
-                if type(op[0]) == type(op[1]):
-                    return op[0] is op[1]
-                else:
-                    return False    
                 return op[0] is op[1] if type(op[0]) == type(op[1]) else False
             elif exp.elem_type == "!=":
                 return op[0] is not op[1] if type(op[0]) == type(op[1]) else True
@@ -391,9 +336,8 @@ class Interpreter(intbase.InterpreterBase):
             return self.binop_error(exp.elem_type, op[0], op[1])
 
     def binop_error(self, op, a, b):
-        if (type(a) == type(b) or (isinstance(a, Function) and isBuiltIn(b)) or
-            (isBuiltIn(a) and isinstance(b, Function))):
-            t = "TYPE.CLOSURE" if isinstance(a, Function) or isBuiltIn(a) else "TYPE.STRING"
+        if type(a) == type(b):            
+            t = "TYPE.CLOSURE" if isinstance(a, Function) else "TYPE.STRING"
             super().error(intbase.ErrorType.TYPE_ERROR,
                           "Incompatible operator " + op + " for type " + t)
         else:
@@ -402,31 +346,22 @@ class Interpreter(intbase.InterpreterBase):
 
     def eval_fcall(self, call, local_vtable, current_fn):
         fname = call.dict["name"]
-        if callable(local_vtable[fname]):
-            if fname == "print":
-                return self.eval_print(call, local_vtable, current_fn)
-            elif fname == "inputi":
-                return self.eval_input("int", call, local_vtable, current_fn)
-            elif fname == "inputs":
-                return self.eval_input("str", call, local_vtable, current_fn)
+        if fname == "print":
+            return self.eval_print(call, local_vtable, current_fn)
+        elif fname == "inputi":
+            return self.eval_input(call, "int", local_vtable, current_fn)
+        elif fname == "inputs":
+            return self.eval_input(call, "str", local_vtable, current_fn)
 
         # Look for the correct function type signature
         try:
             sig = local_vtable[fname]
         except KeyError:
             super().error(intbase.ErrorType.NAME_ERROR, "Function " + fname + "not found")
-        if isinstance(sig, Ref):
-            sig = sig.deref()
         if isinstance(sig, Function):
             f = sig
             if len(f.args) != len(call.dict["args"]):
                 super().error(intbase.ErrorType.TYPE_ERROR, "Invalid # of args to lambda")
-        elif isinstance(sig, Ref):
-            if isinstance(sig.deref(), Function):
-                f = sig.deref()
-            else:
-                super().error(intbase.ErrorType.TYPE_ERROR,
-                              "Trying to call function with non-closure")
         else:
             f = None
             # We already caught lambdas/function aliases above; if we get a non-list, we just
@@ -444,21 +379,27 @@ class Interpreter(intbase.InterpreterBase):
                               str(len(call.dict["args"])) + " parameter(s)")
         
         args = []
+        copytable = copy.deepcopy(local_vtable)
         for a in call.dict["args"]:
             if a.elem_type in Interpreter.__elemtypes:
                 args.append(self.eval_val(a, local_vtable, current_fn))
             elif a.elem_type == "fcall":
-                v = self.eval_fcall(a, local_vtable, current_fn)
-                args.append(v)
-            # If a reference is passed, we know it can be used as a refarg
+                args.append(self.eval_fcall(a, local_vtable, current_fn))
+            # We need to deep copy function parameters that aren't refargs
             elif a.elem_type == "var":
-                ref = self.get_ref(a, local_vtable, current_fn)
-                args.append(Ref(ref))
+                v = self.get_ref(a, local_vtable, current_fn)
+                if isinstance(v, Function):
+                    args.append(copy.deepcopy(v))
+                else:
+                    args.append(v)
             elif a.elem_type == "lambda":
                 args.append(Function(a, True, local_vtable))
             else:
                 assert False, "you missed a case"
-        return self.eval_fdef(f, args, copy.deepcopy(local_vtable), local_vtable, f)
+                
+        # I think we need to overwrite refargs in the deepcopy to the og ptrs
+
+        return self.eval_fdef(f, args, copytable, local_vtable, f)
 
     def eval_fdef(self, f, args, local_vtable, original_vtable, current_fn):
         shadowed_vtable = dict()
@@ -466,38 +407,10 @@ class Interpreter(intbase.InterpreterBase):
         # Align positional params
         for i in range(len(args)):
             vname = f.args[i].dict["name"]
-            # If positional argument is a refarg
-            if vname in f.refargs:
-                # The aligned param is a passed reference
-                if isinstance(args[i], Ref):
-                    # If we sent a refarg function
-                    if isinstance(args[i].deref(), Function):
-                        # For passing function pointers, we *want* to pass the base Function,
-                        # I think?
-                        shadowed_vtable[vname] = args[i].deref()
-                    # Keep the Ref(Ref) if we never deref to a function                        
-                    else:
-                        shadowed_vtable[vname] = args[i]
-                # The aligned param isn't a passed Ref: then it doesn't matter if the positional
-                # parameter is refarg
-                else:
-                    # Pass function params by value
-                    if isinstance(args[i], Function):
-                        shadowed_vtable[vname] = copy.deepcopy(args[i])
-                    # args[i] is a primitive
-                    else:
-                        shadowed_vtable[vname] = Ref(args[i])
-            # If positional isn't a refarg: things should be simpler
-            else:
-                if isinstance(args[i], Ref):
-                    if isinstance(args[i].deref(), Function):
-                        shadowed_vtable[vname] = copy.deepcopy(args[i].deref())
-                    else:
-                        shadowed_vtable[vname] = Ref(args[i].deref())
-                elif isinstance(args[i], Function):
-                    shadowed_vtable[vname] = copy.deepcopy(args[i])
-                else:
-                    shadowed_vtable[vname] = Ref(args[i])
+            shadowed_vtable[vname] = args[i]
+            if f.args[i].elem_type == "refarg":
+                shadowed_vtable[vname] = Ref(vname, original_vtable)
+                assert False, "testing, ref made"
         # Overwrite local_vtable with shadowed vars (we still have closures in current_fn.closures)
         for key in list(shadowed_vtable):
             local_vtable[key] = shadowed_vtable[key]
@@ -512,8 +425,7 @@ class Interpreter(intbase.InterpreterBase):
                 # If we're in a closure, we can modify local_vtable and the closure table, but
                 # we can't touch the original
                 if vname in current_fn.closures:
-                    #self.eval_assign(s, local_vtable, current_fn)
-                    self.eval_assign(s, current_fn.closures, current_fn)
+                    self.eval_assign(s, local_vtable, current_fn)
                 # Variable was not captured: if it's dynamically scoped, we also modify the og table
                 else:
                     if vname in original_vtable:
@@ -537,7 +449,7 @@ class Interpreter(intbase.InterpreterBase):
                     self.__nestedbreak["value"] = None
                     return out
             elif s.elem_type == "return":
-                return self.eval_return(s, local_vtable, current_fn)
+                return self.eval_return(s, local_vtable)
         return None
 
     def eval_print(self, f, local_vtable, current_fn):
@@ -545,6 +457,7 @@ class Interpreter(intbase.InterpreterBase):
             super().output("")
             return None
         acc = ""
+        print(f"#args: {len(f.dict["args"])}")
         for arg in f.dict["args"]:
             if arg.elem_type in Interpreter.__elemtypes:
                 txt = self.eval_val(arg, local_vtable, current_fn)
@@ -552,8 +465,8 @@ class Interpreter(intbase.InterpreterBase):
                 txt = self.get_ref(arg, local_vtable, current_fn)
                 if isinstance(txt, Function):
                     rickroll()
-                else:
-                    txt = txt.deref()
+                elif isinstance(txt, Ref):
+                    txt = txt.getval()
             elif arg.elem_type == "fcall":
                 txt = self.eval_fcall(arg, local_vtable, current_fn)
                 if isinstance(txt, Function):
@@ -571,7 +484,7 @@ class Interpreter(intbase.InterpreterBase):
         super().output(acc)
         return None
 
-    def eval_input(self, itype, f, local_vtable, current_fn):
+    def eval_input(self, f, itype, local_vtable, current_fn):
         if len(f.dict["args"]) > 1:
             iname = "inputi()" if itype == "int" else "inputs()"
             super().error(intbase.ErrorType.NAME_ERROR,
@@ -616,15 +529,10 @@ class Interpreter(intbase.InterpreterBase):
             return self.eval_val(exp, local_vtable, current_fn)
         elif exp.elem_type == "var":
             out = self.get_ref(exp, local_vtable, current_fn)
-            if isinstance(out, Ref):
-                if isinstance(out.deref(), Function):
-                    return copy.deepcopy(out.deref())
-                else:
-                    return out.deref()            
-            elif isinstance(out, Function):
+            if isinstance(out, Function):
                 return copy.deepcopy(out)
             else:
-                assert False, "I don't expect this to happen"
+                return out.val
         else:
             assert False, "you missed a case"
 
@@ -633,8 +541,6 @@ class Interpreter(intbase.InterpreterBase):
         if cond:
             return self.eval_cond_stats(chk.dict["statements"], local_vtable, current_fn)
         else:
-            if "else-statements" not in chk.dict:
-                return None
             return self.eval_cond_stats(chk.dict["else-statements"], local_vtable, current_fn)
 
     def eval_while(self, chk, local_vtable, current_fn):

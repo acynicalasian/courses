@@ -1,0 +1,12 @@
+func foo(ref a) { a = a + 9; }
+func main() {
+  z = 60;
+  foo(z);
+  print(z);
+  }
+
+/*
+*OUT*
+69
+*OUT*
+*/
