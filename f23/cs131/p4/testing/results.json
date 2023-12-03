@@ -37,12 +37,6 @@
             "visibility": "visible"
         },
         {
-            "name": "Correctness | test_treetraversal",
-            "score": 1,
-            "max_score": 1,
-            "visibility": "visible"
-        },
-        {
             "name": "Correctness | test_access_this",
             "score": 1,
             "max_score": 1,
@@ -212,6 +206,12 @@
         },
         {
             "name": "Correctness | test_primitive_capture",
+            "score": 1,
+            "max_score": 1,
+            "visibility": "visible"
+        },
+        {
+            "name": "Correctness | test_nilproto_vs_noproto",
             "score": 1,
             "max_score": 1,
             "visibility": "visible"

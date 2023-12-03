@@ -10,7 +10,7 @@ from env_v3 import EnvironmentManager
 from intbase import InterpreterBase, ErrorType
 
 # Change from Carey's v3: use type_valuev4 instead of ""v3 and import Object too
-from type_valuev4 import Closure, Type, Value, create_value, get_printable, Object
+from type_valuev4 import Closure, Type, Value, create_value, get_printable, Object, NilProto, ProtoValue
 
 
 class ExecStatus(Enum):
@@ -223,7 +223,22 @@ class Interpreter(InterpreterBase):
 
         for formal_ast, actual_ast in zip(formal_args, actual_args):
             if formal_ast.elem_type == InterpreterBase.REFARG_DEF:
-                result = self.__eval_expr(actual_ast)
+                # Edit to Carey's v3: check for passing a proto as reference
+                if actual_ast.elem_type == "var":
+                    objcheck = Interpreter.__DOTREGEX.fullmatch(actual_ast.dict["name"])
+                    if objcheck:
+                        if objcheck.group("rh") == "proto":
+                            print("DEBUGGING: caught proto being passed " + actual_ast.dict["name"])
+                            pv_rh = self.__eval_expr(actual_ast)
+                            result = ProtoValue(pv_rh.t, pv_rh.v)
+                            assert result.t is self.__eval_expr(actual_ast).t
+                            assert result.v is self.__eval_expr(actual_ast).v
+                        else:
+                            result = self.__eval_expr(actual_ast)
+                    else:
+                        result = self.__eval_expr(actual_ast)
+                else:
+                    result = self.__eval_expr(actual_ast)
             else:
                 result = copy.deepcopy(self.__eval_expr(actual_ast))
             arg_name = formal_ast.get("name")
@@ -273,7 +288,7 @@ class Interpreter(InterpreterBase):
             else:
                 if fieldname == "proto":
                     if src_value_obj.v is None:
-                        checkObjExists.v.proto = None
+                        checkObjExists.v.proto = NilProto()
                     elif isinstance(src_value_obj.v, Object):
                         checkObjExists.v.proto = src_value_obj.v
                     else:
@@ -288,6 +303,10 @@ class Interpreter(InterpreterBase):
             else:
                 src_value_obj = copy.copy(rh)
             target_value_obj = self.env.get(var_name)
+            # Catch edge case of passing a proto as pass-by-ref and trying to set it to a non-obj
+            if isinstance(target_value_obj, ProtoValue):
+                if not isinstance(src_value_obj.v, Object):
+                    super().error(ErrorType.TYPE_ERROR, "Can't set proto to non-object type")
             if target_value_obj is None:
                 self.env.set(var_name, src_value_obj)
             else:
@@ -356,8 +375,10 @@ class Interpreter(InterpreterBase):
             elif fieldname == "proto":
                 if checkObjExists.v.proto is None:
                     super().error(ErrorType.NAME_ERROR, "Field proto not found in object " + objname)
+                elif isinstance(checkObjExists.v.proto, NilProto):
+                    return Value(Type.NIL, None)
                 return Value(Type.OBJECT, checkObjExists.v.proto)
-            elif checkObjExists.v.proto is not None:
+            elif checkObjExists.v.proto is not None and not isinstance(checkObjExists.v.proto, NilProto):
                 protoptr = checkObjExists.v.proto
                 while protoptr:
                     if fieldname in protoptr.fields:

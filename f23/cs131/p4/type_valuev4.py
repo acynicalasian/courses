@@ -50,7 +50,19 @@ class Object:
         # Treat vars and methods identically as first-class for now: keep them all in self.fields
         self.fields = dict()
         self.proto = None
-        
+
+# My addition to Carey's v3: dummy support to allow setting proto field explicitly to nil
+class NilProto:
+    def __init__(self):
+        pass
+
+# Catch edge case of using pass-by-reference to set a proto to a non-obj
+class ProtoValue(Value):
+    def __init__(self, t, v=None):
+        super().__init__(t, v)
+    def cpValue(self, v):
+        self.t = v.t
+        self.v = v.v
         
 
 def create_value(val):
