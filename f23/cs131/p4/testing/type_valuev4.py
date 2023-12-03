@@ -21,8 +21,7 @@ class Closure:
         # Edit to Carey's v3: Objects and closures are captured by reference
         for e, e_cp in zip(env.environment, self.captured_env.environment):
             for vname in e:
-                if (isinstance(e[vname].v, Object) or isinstance(e[vname].v, Closure)
-                    or isinstance(e[vname], Object) or isinstance(e[vname], Closure)):
+                if isinstance(e[vname].v, Object) or isinstance(e[vname].v, Closure):
                     e_cp[vname] = e[vname]                                            
         self.func_ast = func_ast
         self.type = Type.CLOSURE
