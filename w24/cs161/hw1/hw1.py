@@ -185,13 +185,12 @@ def ON_PATH(S, STATES):
 # [].
 def MULT_DFS(STATES, PATH):
     for succ_state in STATES:
-        new_path = PATH.append(succ_state)
-        search = DFS(succ_state, new_path)
-        if search:
-            return search
-    return []
-            
-
+        new_path = PATH
+        new_path.append(succ_state)
+        out = DFS(succ_state, new_path)
+        if out:
+            return out
+    return []            
 
 # DFS does a depth first search from a given state to the goal state. It
 # takes two arguments: a state (S) and the path from the initial state to S
@@ -210,10 +209,11 @@ def DFS(S, PATH):
     next_states = []
     if next_poss_states:
         for s in next_poss_states:
-            if s not in PATH:
+            if not ON_PATH(s, PATH):
                 next_states.append(s)
         if next_states:
-            return MULT_DFS(next_states, PATH)
+            out = MULT_DFS(next_states, PATH)
+            return out if out else False
         else:
             return False
     else:
