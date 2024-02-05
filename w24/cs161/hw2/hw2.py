@@ -10,7 +10,7 @@
 
 # All functions that you need to modify are marked with 'EXERCISE' in their header comments.
 # Do not modify astar.py
-# This file also contains many helper functions. You may call any of them in your functions.
+n# This file also contains many helper functions. You may call any of them in your functions.
 
 
 # Due to the memory limitation, the A* algorithm may crash on some hard sokoban problems if too many
@@ -131,7 +131,16 @@ def cleanUpList(s_list):
 # this function as the goal testing function, A* will never
 # terminate until the whole search space is exhausted.
 def goal_test(s):
-    raise NotImplementedError()
+    # If we have a box, we either haven't solved/failed yet, or the problem isn't
+    # solvable because we have more boxes than goals
+    row = s.shape[0]
+    col = s.shape[1]
+    for i in range(row):
+        for j in range(col):
+            if isBox(s[i,j]):
+                return False
+    return True
+
 
 
 # EXERCISE: Modify this function to return the list of
@@ -154,23 +163,99 @@ def goal_test(s):
 def next_states(s):
     row, col = getKeeperPosition(s)
     s_list = []
-    s1 = np.copy(s)
+
+    ### Edited: commented this out for now to only create array copies if the conditions are right
+    #s1 = np.copy(s)
 
     # NOT IMPLEMENTED YET! YOU NEED TO FINISH THIS FUNCTION.
 
-    return cleanUpList(s_list)
+    ### Beginning of my implementation:
+    height, width = np.shape(s)
+
+    # check UP DOWN LEFT RIGHT
+    adjacent_coords = [(row-1,col), (row+1,col), (row,col-1), (row,col+1)]
+    push_coords = [(row-2,col), (row+2,col), (row,col-2), (row,col+2)]
+    for i in range(4):
+        (adj_y, adj_x) = adjacent_coords[i]
+        # Skip if adj_y or adj_x coordinates are invalid
+        if adj_y < 0 or adj_y >= height or adj_x < 0 or adj_x >= width:
+            continue
+        # Walkable? So direction we walk is either blank or goal
+        if isBlank(s[adj_y, adj_x]) or isStar(s[adj_y, adj_x]):
+            s_copy = np.copy(s)
+            # Are we stepping off a goal or a blank?
+            if isKeeper(s_copy[row, col]):
+                s_copy[row, col] = blank
+            elif isKeeperstar(s_copy[row, col]):
+                s_copy[row, col] = star
+            else: # this shouldn't happen, we have a logic error
+                assert False, "logic error"
+            # Are we stepping onto a blank or a goal?
+            if isBlank(s_copy[adj_y, adj_x]):
+                s_copy[adj_y, adj_x] = keeper
+            elif isStar(s_copy[adj_y, adj_x]):
+                s_copy[adj_y, adj_x] = keeperstar
+            else:
+                assert False, "logic error"
+            s_list.append(s_copy)
+        # We walk into a wall
+        elif isWall(s[adj_y, adj_x]):
+            continue
+        # We walk into a box
+        elif isBox(s[adj_y, adj_x]) or isBoxstar(s[adj_y, adj_x]):
+            # Are we pushing onto a blank, goal, or box/wall?
+            (push_y, push_x) = push_coords[i]
+            # Skip if push coordinates are invalid
+            if push_y < 0 or push_y >= height or push_x < 0 or push_x >= width:
+                continue
+            if isBlank(s[push_y, push_x]) or isStar(s[push_y, push_x]):
+                # Only bother to copy if we're pushing into a pushable area
+                s_copy = np.copy(s)
+                # Are we stepping off a blank or a goal?
+                s_copy[row, col] = blank if isKeeper(s[row, col]) else star
+                # Are we pushing a box off and stepping onto a blank or a goal?
+                s_copy[adj_y, adj_x] = keeper if isBox(s[adj_y, adj_x]) else keeperstar
+                # Are we pushing a box onto a blank or a goal?
+                s_copy[push_y, push_x] = box if isBlank(s[push_y, push_x]) else boxstar
+                s_list.append(s_copy)
+            elif isWall(s[push_y, push_x]) or isBox(s[push_y, push_x]) or isBoxstar(s[push_y, push_x]):
+                continue
+            else:
+                assert False, "logic error"
+        else:
+            assert False, "we walked into another keeper? tf"
+    
+    return s_list
+    ### End of my implementation
+
+    ### Edited: commented this out for now since I *think* my implementation doesn't add Nones
+    # return cleanUpList(s_list)
 
 
 # EXERCISE: Modify this function to compute the trivial
 # admissible heuristic.
 def h0(s):
-    raise NotImplementedError()
+    return 0
 
 
 # EXERCISE: Modify this function to compute the
 # number of misplaced boxes in state s (numpy array).
+#
+# My answer to HW2 problem:
+# -----------------------------
+#
+# This heuristic is admissible because the lowest possible number of steps to a game with n misplaced boxes is
+# 2n-1 (push into goal, step, push, step... push), and n = 2n-1 for n = 1, and n < 2n-1 else
 def h1(s):
-    raise NotImplementedError()
+    count = 0
+    (row, col) = np.shape(s)
+    for i in range(row):
+        for j in range(col):
+            if isBox(s[i,j]):
+                count += 1
+    return count
+    
+    
 
 
 # EXERCISE: Change the name of this function to h<UID> where
@@ -180,9 +265,63 @@ def h1(s):
 # This function will be tested in various hard examples.
 # Objective: make A* solve problems as fast as possible.
 
-def hUID(s):
-    raise NotImplementedError()
+def h004919548(s):
+    return h_greedy(s)
 
+def h_greedy(s):
+    """
+    We use a greedy approach for this heuristic. Choose a box and corresponding goal that gives the lowest cost 
+    for moving just that box. For example, if there's one box that's 1m away, and the closest goal to that box is 
+    4m away, and there's a second box that's 2m away but the closest goal to that box is 2m away from it, moving 
+    the second box to the goal that's 2m away from it would be the greedy choice.
+
+    This heuristic function is admissible for a number of reasons. For n = 1 box, this approach solves the 
+    problem trivially, but for greater than that, note the following:
+
+    If the greedy choice is optimal, then the total cost of moving every box is always higher than the cost of 
+    moving the first box greedily, especially since you cannot move more than one box at a time. If the greedy 
+    choice would not be optimal, that implies that the moving the first box wherever has a higher cost than 
+    moving the box we chose with the greedy method.
+
+    Finally, this heuristic function relies on straight-line distances, and due to the geometry/constraints of 
+    the problem, straight-line distances are always at least the distance/steps needed in Sokoban.
+
+    The time complexity, given n goals (note that # goals >= # boxes) should be O(n^2). We could try to always 
+    choose the nearest box, but I'm hoping that despite being O(n^2) vs. O(n) for choosing the nearest box, 
+    this heuristic is smart enough that I get more time savings from that than losing time from increased 
+    time complexity.
+    """
+    (keeper_y, keeper_x) = getKeeperPosition(s)
+    (height, width) = np.shape(s)
+    box_coords = []
+    goal_coords = []
+    for i in range(height):
+        for j in range(width):
+            if isBox(s[i,j]):
+                box_coords.append((i,j))
+            if isStar(s[i,j]):
+                goal_coords.append((i,j))
+    minval = None
+    # No more boxes? Return 0
+    # 
+    if not box_coords or not goal_coords:
+        return 0
+    for (box_y, box_x) in box_coords:
+        a2b2_box = (box_y - keeper_y) ** 2 + (box_x - keeper_x) ** 2
+        c_box = a2b2_box ** 0.5
+        for (goal_y, goal_x) in goal_coords:
+            a2b2_goal = (goal_y - box_y) ** 2 + (goal_x - box_x) ** 2
+            c_goal = a2b2_goal ** 0.5
+            hestimate = c_box + c_goal
+            if minval is None:
+                minval = hestimate
+            elif hestimate < minval:
+                minval = hestimate
+    assert minval is not None, "Logic error in heuristic fn"
+    return int(minval)
+
+def h_manhattan(s):
+    pass
 
 # Some predefined problems with initial state s (array). Sokoban function will automatically transform it to numpy
 # array. For other function, the state s is presented as a numpy array. You can just call sokoban(init-state,
@@ -451,10 +590,16 @@ def printlists(lists):
 
 
 if __name__ == "__main__":
-    sokoban(s1, h0)
+### Original from prof (commented out by me)
+    # sokoban(s1, h0)
 
-    sokoban(s2, h0)
+    # sokoban(s2, h0)
 
-    sokoban(s3, h0)
+    # sokoban(s3, h0)
 
-    sokoban(s4, h0)
+    # sokoban(s4, h0)
+### End original from prof
+    sokoban(s9, h004919548)
+    sokoban(s10, h004919548)
+    sokoban(s11, h004919548)
+    sokoban(s12, h004919548)
