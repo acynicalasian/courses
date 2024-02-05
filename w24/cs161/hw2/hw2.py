@@ -10,7 +10,7 @@
 
 # All functions that you need to modify are marked with 'EXERCISE' in their header comments.
 # Do not modify astar.py
-n# This file also contains many helper functions. You may call any of them in your functions.
+# This file also contains many helper functions. You may call any of them in your functions.
 
 
 # Due to the memory limitation, the A* algorithm may crash on some hard sokoban problems if too many
@@ -266,7 +266,11 @@ def h1(s):
 # Objective: make A* solve problems as fast as possible.
 
 def h004919548(s):
-    return h_greedy(s)
+    #return h_greedy(s)
+    #return h_boxonly_greedy(s)
+    return h_manhattan(s)
+    #return h_boxonly_manhattan(s)
+
 
 def h_greedy(s):
     """
@@ -303,7 +307,8 @@ def h_greedy(s):
                 goal_coords.append((i,j))
     minval = None
     # No more boxes? Return 0
-    # 
+    # Not sure why we need this second condition but was failing otherwise
+    # But I did have a bug in state generator which may be why I needed it
     if not box_coords or not goal_coords:
         return 0
     for (box_y, box_x) in box_coords:
@@ -320,8 +325,87 @@ def h_greedy(s):
     assert minval is not None, "Logic error in heuristic fn"
     return int(minval)
 
+def h_boxonly_greedy(s):
+    """
+    Greedy and admissible for similar reasons as above. But this is O(n) time, so o let's see if things improve.
+    """
+    (keeper_y, keeper_x) = getKeeperPosition(s)
+    (height, width) = np.shape(s)
+    box_coords = []
+    goal_coords = []
+    for i in range(height):
+        for j in range(width):
+            if isBox(s[i,j]):
+                box_coords.append((i,j))
+            if isStar(s[i,j]):
+                goal_coords.append((i,j))
+    minval = None
+    if not box_coords:
+        return 0
+    for (box_y, box_x) in box_coords:
+        a2b2_box = (box_y - keeper_y) ** 2 + (box_x - keeper_x) ** 2
+        c_box = a2b2_box ** 0.5
+        if minval is None:
+            minval = c_box
+        elif c_box < minval:
+            minval = c_box
+    assert minval is not None, "Logic error in h_boxonly_greedy"
+    return int(minval)
+
 def h_manhattan(s):
-    pass
+    """
+    Same principles as before. Let's try measuring both a box distance with the manhattan distance. O(n^2) complexity.
+    """
+    (keeper_y, keeper_x) = getKeeperPosition(s)
+    (height, width) = np.shape(s)
+    box_coords = []
+    goal_coords = []
+    for i in range(height):
+        for j in range(width):
+            if isBox(s[i,j]):
+                box_coords.append((i,j))
+            if isStar(s[i,j]):
+                goal_coords.append((i,j))
+    minval = None
+    if not box_coords or not goal_coords:
+        return 0
+    for (box_y, box_x) in box_coords:
+        c_box = abs(box_y - keeper_y) + abs(box_x - keeper_x)
+        for (goal_y, goal_x) in goal_coords:
+            c_goal = abs(goal_y - box_y) + abs(goal_x - box_x)
+            hestimate = c_box + c_goal
+            if minval is None:
+                minval = hestimate
+            elif hestimate < minval:
+                minval = hestimate
+    assert minval is not None, "Logic error in manhattan fn"
+    return int(minval)
+
+def h_boxonly_manhattan(s):
+    """
+    Manhattan but measuring only to the closest box. O(n).
+    """
+    (keeper_y, keeper_x) = getKeeperPosition(s)
+    (height, width) = np.shape(s)
+    box_coords = []
+    goal_coords = []
+    for i in range(height):
+        for j in range(width):
+            if isBox(s[i,j]):
+                box_coords.append((i,j))
+            if isStar(s[i,j]):
+                goal_coords.append((i,j))
+    minval = None
+    if not box_coords:
+        return 0
+    for (box_y, box_x) in box_coords:
+        c_box = abs(box_y - keeper_y) + abs(box_x - keeper_x)
+        if minval is None:
+            minval = c_box
+        elif c_box < minval:
+            minval = c_box
+    assert minval is not None, "logic error in manhattan box only"
+    return int(minval)
 
 # Some predefined problems with initial state s (array). Sokoban function will automatically transform it to numpy
 # array. For other function, the state s is presented as a numpy array. You can just call sokoban(init-state,
@@ -599,7 +683,24 @@ if __name__ == "__main__":
 
     # sokoban(s4, h0)
 ### End original from prof
-    sokoban(s9, h004919548)
-    sokoban(s10, h004919548)
-    sokoban(s11, h004919548)
-    sokoban(s12, h004919548)
+    import time
+    start_time = time.time()
+    sokoban(s16, h0)
+    print("h0: ", str(time.time() - start_time))
+    start_time = time.time()
+    sokoban(s16, h1)
+    print("h1: ", str(time.time() - start_time))
+    start_time = time.time()
+    sokoban(s16, h_greedy)
+    print("h_greedy: ", str(time.time() - start_time))
+    start_time = time.time()
+    sokoban(s16, h_boxonly_greedy)
+    print("h_boxonly_greedy: ", str(time.time() - start_time))
+    start_time = time.time()
+    sokoban(s16, h_manhattan)
+    print("h_manhattan: ", str(time.time() - start_time))
+    start_time = time.time()
+    sokoban(s16, h_boxonly_manhattan)
+    print("h_boxonly_manhattan: ", str(time.time() - start_time))
+    
+    
