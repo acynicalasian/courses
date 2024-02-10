@@ -1,0 +1,151 @@
+s1:
+	h0: 49, .0043
+	h1: 43, .0049
+	h_greedy: 29, .0051
+	h_boxonly_greedy: 32, .0055
+	h_manhattan: 18, .0020
+	h_boxonly_manhattan: 31, .0027
+
+s2:
+	h0: 89, .0081
+	h1: 75, .0091
+	h_greedy: 56, .0079
+	h_boxonly_greedy: 61, .0060
+	h_manhattan: 26, .0029
+	h_boxonly_manhattan: 56, .0059
+
+s3:
+	h0: 190, .0211
+	h1: 166, .0130
+	h_greedy: 51, .0065
+	h_boxonly_greedy: 119, .0143
+	h_manhattan: 44, .0052
+	h_boxonly_manhattan: 99, .0112
+
+s4:
+	h0: 280, .0251
+	h1: 229, .0170
+	h_greedy: 67, .0076
+	h_boxonly_greedy: 162, .0180
+	h_manhattan: 34, .0035
+	h_boxonly_manhattan: 141, .0149
+
+s5:
+	h0: 172, .0144
+	h1: 119, .0110
+	h_greedy: 133, .0135
+	h_boxonly_greedy: 109, .0109
+	h_manhattan: 98, .0088
+	h_boxonly_manhattan: 116, .0101
+
+s6:
+	h0: 434, .0296
+	h1: 301, .0169
+	h_greedy: 258, .0255
+	h_boxonly_greedy: 311, .0284
+	h_manhattan: 132, .0117
+	m_boxonly_manhattan: 291, .0253
+
+s7:
+	h0: 1623, .1391
+	h1: 1589, .1608
+	h_greedy: 1149, .1903
+	h_boxonly_greedy: 1425, .2277
+	h_manhattan: 839, .1357
+	h_boxonly_manhattan: 1326, .2080
+
+s8:
+	h0: 1223, .0566
+	h1: 1016, .0497
+	h_greedy: 959, .0855
+	h_boxonly_greedy: 1107, .0858
+	h_manhattan: 963, .0718
+	h_boxonly_manhattan: 1072, .0777
+
+s9:
+	h0: 776, .0515
+	h1: 740, .0498
+	h_greedy: 707, .0799
+	h_boxonly_greedy: 718, .0760
+	h_manhattan: 661, .0679
+	h_boxonly_manhattan: 698, .0711
+
+s10:
+	h0: 970, .0710
+	h1: 958, .0790
+	h_greedy: 815, .1102
+	h_boxonly_greedy: 908, .1136
+	h_manhattan: 762, .0924
+	h_boxonly_manhattan: 875, .1055
+
+s11:
+	h0: 7761, .3739
+	h1: 6775, .4074
+	h_greedy: 6662, .7733
+	h_boxonly_greedy: 7099, .6926
+	h_manhattan: 6333, .5858
+	h_boxonly_manhattan: 6917, .6248
+
+s12:
+	h0: 15191, 1.403
+	h1: 14599, 1.769
+	h_greedy: 12156, 2.426
+	h_boxonly_greedy: 13801, 2.617
+	h_manhattan: 10839, 1.993
+	h_boxonly_manhattan: 13532, 2.490
+
+s13:
+	h0: 28523, 2.392
+	h1: 22709, 2.536
+	h_greedy: 18647, 3.766
+	h_boxonly_greedy: 22294, 4.037
+	h_manhattan: 16298, 2.845
+	h_boxonly_manhattan: 21214, 3.625
+
+s14:
+	h0: 41266, 1.705
+	h1: 38174, 2.069
+	h_greedy: 37345, 3.918
+	h_boxonly_greedy: 38893, 3.389
+	h_manhattan: 35300, 2.912
+	h_boxonly_manhattan: 36798, 2.943
+
+s15:
+	h0: 20093, 0.988
+	h1: 18881, 1.230
+	h_greedy: 19214, 2.350
+	h_boxonly_greedy: 19400, 1.994
+	h_manhattan: 18420, 1.822
+	h_boxonly_manhattan: 19322, 1.843
+
+s16:
+	h0: 15398, 0.930
+	h1: 15362, 1.205
+	h_greedy: 15396, 2.181
+	h_boxonly_greedy: 15374, 1.910
+	h_manhattan: 15449, 1.863
+	h_boxonly_manhattan: 15394, 1.820
+
+s17:
+	h0: 961598, 69.5
+	h1: 900791, 83.7
+	h_greedy: 896338, 171.4
+	h_boxonly_greedy: 944743, 138.4
+	h_manhattan: 874579, 126.0
+	h_boxonly_manhattan: 923750, 128.5
+
+s18:
+	h0: 7114, 2.418
+	h1: 4903, 2.103
+	h_greedy: 2454, 1.730
+	h_boxonly_greedy: 4203, 2.867
+	h_manhattan: 1589, 1.082
+	h_boxonly_manhattan: 3631, 2.453
+
+s19:
+	h0: 1437, .2223
+	h1: 973, .1837
+	h_greedy: 564, .1782
+	h_boxonly_greedy: 926, .2793
+	h_manhattan: 397, .1203
+	h_boxonly_manhattan: 669, .1998
