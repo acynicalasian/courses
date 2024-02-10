@@ -209,6 +209,18 @@ def next_states(s):
             if push_y < 0 or push_y >= height or push_x < 0 or push_x >= width:
                 continue
             if isBlank(s[push_y, push_x]) or isStar(s[push_y, push_x]):
+                # Did we push a box into a blank space where a corner is? If so, we have no way to solve
+                # so don't generate new states
+                if isBlank(s[push_y, push_x]) and push_y > 0 and isWall(s[push_y - 1, push_x]): # check up
+                    if push_x > 0 and isWall(s[push_y, push_x - 1]): # check left
+                        continue
+                    if push_x < width - 1 and isWall(s[push_y, push_x + 1]): # check right
+                        continue
+                if isBlank(s[push_y, push_x]) and push_y < height - 1 and isWall(s[push_y + 1, push_x]): # check down
+                    if push_x > 0 and isWall(s[push_y, push_x - 1]): # check left
+                        continue
+                    if push_x < width - 1 and isWall(s[push_y, push_x + 1]): # check right
+                        continue
                 # Only bother to copy if we're pushing into a pushable area
                 s_copy = np.copy(s)
                 # Are we stepping off a blank or a goal?
@@ -244,8 +256,7 @@ def h0(s):
 # My answer to HW2 problem:
 # -----------------------------
 #
-# This heuristic is admissible because the lowest possible number of steps to a game with n misplaced boxes is
-# 2n-1 (push into goal, step, push, step... push), and n = 2n-1 for n = 1, and n < 2n-1 else
+# This heuristic is admissible because the lowest possible number of steps to a game with n misplaced boxes is n steps
 def h1(s):
     count = 0
     (row, col) = np.shape(s)
@@ -290,10 +301,10 @@ def h_greedy(s):
     Finally, this heuristic function relies on straight-line distances, and due to the geometry/constraints of 
     the problem, straight-line distances are always at least the distance/steps needed in Sokoban.
 
-    The time complexity, given n goals (note that # goals >= # boxes) should be O(n^2). We could try to always 
-    choose the nearest box, but I'm hoping that despite being O(n^2) vs. O(n) for choosing the nearest box, 
-    this heuristic is smart enough that I get more time savings from that than losing time from increased 
-    time complexity.
+    Every time we calculate this heuristic, we search the entire field for misplaced boxes in the current state.
+    Assume that's size s^2. Then, for n misplaced boxes and >= n goals in a solvable puzzle, we calculate the 
+    Euclidean distance to the nearest box, and then we search for the nearest goal. This gives n^2. So the
+    overall time complexity is roughly O(s^2).
     """
     (keeper_y, keeper_x) = getKeeperPosition(s)
     (height, width) = np.shape(s)
@@ -312,11 +323,15 @@ def h_greedy(s):
     if not box_coords or not goal_coords:
         return 0
     for (box_y, box_x) in box_coords:
-        a2b2_box = (box_y - keeper_y) ** 2 + (box_x - keeper_x) ** 2
-        c_box = a2b2_box ** 0.5
+        # Find the nearest box
+        a2_box = (box_y - keeper_y) * (box_y - keeper_y)
+        b2_box = (box_x - keeper_x) * (box_x - keeper_x)
+        c_box = np.sqrt(a2_box + b2_box)
         for (goal_y, goal_x) in goal_coords:
-            a2b2_goal = (goal_y - box_y) ** 2 + (goal_x - box_x) ** 2
-            c_goal = a2b2_goal ** 0.5
+            # Find the nearest goal to the nearest box
+            a2_goal = (goal_y - box_y) * (goal_y - box_y)
+            b2_goal = (goal_x - box_x) * (goal_x - box_x)
+            c_goal = np.sqrt(a2_goal + b2_goal)
             hestimate = c_box + c_goal
             if minval is None:
                 minval = hestimate
@@ -327,7 +342,7 @@ def h_greedy(s):
 
 def h_boxonly_greedy(s):
     """
-    Greedy and admissible for similar reasons as above. But this is O(n) time, so o let's see if things improve.
+    Greedy and admissible for similar reasons as above. Still bound by game size, so O(s^2).
     """
     (keeper_y, keeper_x) = getKeeperPosition(s)
     (height, width) = np.shape(s)
@@ -343,8 +358,9 @@ def h_boxonly_greedy(s):
     if not box_coords:
         return 0
     for (box_y, box_x) in box_coords:
-        a2b2_box = (box_y - keeper_y) ** 2 + (box_x - keeper_x) ** 2
-        c_box = a2b2_box ** 0.5
+        a2_box = (box_y - keeper_y) * (box_y - keeper_y)
+        b2_box = (box_x - keeper_x) * (box_x - keeper_x)
+        c_box = np.sqrt(a2_box + b2_box)
         if minval is None:
             minval = c_box
         elif c_box < minval:
@@ -354,7 +370,8 @@ def h_boxonly_greedy(s):
 
 def h_manhattan(s):
     """
-    Same principles as before. Let's try measuring both a box distance with the manhattan distance. O(n^2) complexity.
+    Same principles as before. Let's try measuring both a box distance and the goal distance with the 
+    manhattan distance. O(s^2) complexity.
     """
     (keeper_y, keeper_x) = getKeeperPosition(s)
     (height, width) = np.shape(s)
@@ -383,7 +400,7 @@ def h_manhattan(s):
 
 def h_boxonly_manhattan(s):
     """
-    Manhattan but measuring only to the closest box. O(n).
+    Manhattan but measuring only to the closest box. O(s^2) due to searching the game state for boxes.
     """
     (keeper_y, keeper_x) = getKeeperPosition(s)
     (height, width) = np.shape(s)
