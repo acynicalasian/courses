@@ -38,6 +38,7 @@ def at_most_one_color(n, k):
     # true are 10000, 01000, 00100, etc.
     # We can systematically make a CNF formula by the conjunction of clauses based on values that
     # are false; add clauses to the formula that always return false for a false value
+    # Generates 2^k values per node... should be managable
     trues = [0]
     for exp in range(k):
         trues.append(2**exp)
@@ -69,38 +70,16 @@ def generate_node_clauses(n, k):
 # "Nodes connected by an edge e (represented by a list)
 # cannot have the same color"
 def generate_edge_clauses(e, k):
-    # Given the bitstring [node_x_color1, node_x_color2, ..., node_y_color1, node_y_color2, ...],
-    # we can check whether bitstr[i] AND bitstr[i+k]. If this is true, the nodes have the same color
-    # so it is a false value; add the disjunctive clause that always returns false for that value
+    # All passing strings follow the format (no_match_c1 and no_match_c2 and no_match_c3 ...)
+    # (not node1_color1 or not node2_color1) always fails for (1,1), we get a trivial CNF here
+    # Node clauses should further bound this requirement, we don't need to generate CNFs based on
+    # the semantics of the function
     x,y = e
     output = []
-    for i in range(2**(2*k)):
-        # Generate a bitstring and check whether it would cause nodes x and y to have matching color
-        # values. If so, add the disjunctive clause that always returns false for that value.
-        bitstr = (bin(i+2**(2*k)))[3:]
-        assert len(bitstr) == 2*k
-        clause = []
-        found_false_value = False
-        for c in range(1, k + 1):
-            if bitstr[c - 1] == bitstr[c - 1 + k] and bitstr[c - 1] == '1':
-                found_false_value = True
-        if not found_false_value:
-            continue    # No need to calculate the always-false clause for a true value
-        found_false_value = False
-        for c in range(1,k+1):
-            xliteral = node2var(x,c,k)
-            yliteral = node2var(y,c,k)
-            if bitstr[c-1] == '0':
-                clause.append(xliteral)
-            else:
-                clause.append(-xliteral)
-            if bitstr[c -1 + k] == '0':
-                clause.append(yliteral)
-            else:
-                clause.append(-yliteral)
-        output.append(clause)
-    return output                
-            
+    for c in range(1, k + 1):
+        output.append([-node2var(x,c,k), -node2var(y,c,k)])
+    return output        
+
 # The function below converts a graph coloring problem to SAT
 # DO NOT MODIFY
 def graph_coloring_to_sat(graph_fl, sat_fl, k):
@@ -121,8 +100,5 @@ def graph_coloring_to_sat(graph_fl, sat_fl, k):
 
 
 # Example function call
-if __name__ == "__main__":
-   graph_coloring_to_sat("graph1.txt", "graph1_3colors.txt", 3)
-   # Custom ones
-   graph_coloring_to_sat("graph1.txt", "graph1_4clr", 4)
-   graph_coloring_to_sat("test_graph", "test_graph_3clr", 3)
+# if __name__ == "__main__":
+#    graph_coloring_to_sat("graph1.txt", "graph1_3colors.txt", 3)
